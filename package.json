@@ -1,0 +1,42 @@
+{
+  "name": "rifttask",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first project workspace for solo developers",
+  "author": "wisedev",
+  "license": "UNLICENSED",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test:core": "node --test tests/*.test.cjs",
+    "test:ui": "vitest run",
+    "test": "npm run test:core && npm run test:ui",
+    "start": "electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never"
+  },
+  "dependencies": {"react": "19.3.1", "react-dom": "19.3.1"},
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5",
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0",
+    "@testing-library/react": "latest",
+    "@testing-library/user-event": "latest",
+    "@testing-library/jest-dom": "latest",
+    "jsdom": "latest"
+  },
+  "build": {
+    "appId": "dev.wisedev.rifttask",
+    "productName": "RiftTask",
+    "directories": {"output": "release"},
+    "files": ["dist/**/*", "desktop/**/*", "package.json"],
+    "asar": true,
+    "mac": {"target": [{"target": "zip", "arch": ["arm64", "x64"]}], "category": "public.app-category.productivity"},
+    "win": {"target": [{"target": "nsis", "arch": ["x64", "arm64"]}]},
+    "nsis": {"oneClick": true, "perMachine": false}
+  }
+}
