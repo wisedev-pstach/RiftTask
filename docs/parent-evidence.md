@@ -26,6 +26,14 @@ These tests check orchestration using injected auth/store, not filesystem persis
 
 Initial node_modules size 466 MB; persistent disk still ~18 GB available. Do not retain redundant installer caches.
 
+## First-milestone integration verification
+
+- Parent reran all tests after merging agent files and after its account-switch regression fix: **27 core/shell/service + 13 renderer tests passed**, no failures. Production `npm run build` passed.
+- Added external gh-account-switch regression, saw missing-rejection RED, then bound service's open session to the verified numeric account ID and reran GREEN. A changed CLI identity must be explicitly reconnected rather than writing the open account's tasks into the new identity.
+- Actual authenticated gh adapter smoke returned `wisedev-pstach`, numeric ID `111281468`; saved a validated sample in a new scratch account directory, reconstructed the store/service, loaded the sample successfully. Scratch was removed; no actual user workspace was seeded.
+- Parent browser opened the real Vite renderer and verified empty-workspace DOM plus explicit preview disclosure. Screenshot attempts timed out; no parent visual screenshot claim.
+- Stopped both parent and leftover child Vite preview process groups, then HTTP requests to ports 5173 and 5174 failed as expected. No preview server intentionally remains running.
+
 ## Scheduling
 
 Created and listed job `ff747c1cbab3`, seven passes every six hours to this Discord DM. First next_run_at returned `2026-10-24T18:57:12.834630+00:00`. Durable continuation instructions in BUILD-STATE.md. This is scheduling verification, not evidence that a future run completed or delivered.

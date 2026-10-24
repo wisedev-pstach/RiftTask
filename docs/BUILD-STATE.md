@@ -31,4 +31,16 @@ This file is the durable task home, not persistent memory. At each scheduled pas
 - Dependencies: current versions looked up in npm registry with system CA; no TLS verification disabled.
 
 ## Current status
-FIRST MILESTONE IN PROGRESS. No release or installer yet.
+FIRST MILESTONE VERIFIED LOCALLY; all source is ready for the parent private push (remote SHA checked after push).
+
+- Core/domain, account-isolated disk store, gh identity adapter, secure Electron shell, React task UI all implemented.
+- Parent final rerun `npm test`: **27 core/shell/service tests + 13 renderer DOM tests passed**, production Vite build passed. This includes a regression observed RED then fixed: external gh account switching cannot redirect an open workspace into another account's storage.
+- Parent exercised REAL authenticated `/opt/data/bin/gh api user` -> app identity adapter -> validated sample workspace -> scratch account disk save -> fresh store load: PASS. Scratch directory removed. No tasks written into actual user application data.
+- UI includes category/project create/edit, project archive/restore, task CRUD with notes/due/priority/status/Today, search, list/board, loading/error/offline states, explicit ephemeral browser preview.
+- Safe repository URL opening is implemented. Native terminal, gitStatus, chooseDirectory, export/import, and launching the gh login onboarding flow are NOT implemented yet; their IPC calls throw clear scheduled-milestone errors, NOT success. UI currently exposes some of these controls and displays the errors: wire them in next passes.
+- Native Electron smoke blocked by missing Linux `libgtk-3.so.0`. Parent browser DOM verified the real empty renderer; screenshot capture timed out. UI subagent reports a separate successful preview walkthrough and recorded details in docs/ui-evidence.md; parent has not independently verified that visual screenshot.
+- gh default executable resolution currently uses PATH only. Must resolve `/opt/homebrew/bin/gh`, `/usr/local/bin/gh`, Windows standard/winget paths for GUI launch and this host's `/opt/data/bin/gh` safely. Real-auth smoke used explicit gh runner to bypass host PATH ambiguity for that test only.
+- npm install succeeded, production-only dependency audit returned zero vulnerabilities. npm 12 blocked `electron-winstaller` install script; review it before packaging instead of blanket enabling scripts. Reproducible lockfile is committed.
+- Scheduled job ff747c1cbab3 is enabled for seven six-hour passes, first 2026-10-24 18:57 UTC. This is continuation schedule, not evidence future work completed.
+
+No release, one-command installer, cloud sync, provider issue import, or native Windows/macOS verification yet. Keep work paced; complete remaining ordered items during scheduled passes.

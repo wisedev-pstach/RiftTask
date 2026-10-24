@@ -18,6 +18,14 @@ test('load rejects disconnected users before reading disk',async()=>{
 test('save derives the account from main-process authentication',async()=>{
  const {service,calls}=setup();assert.deepEqual(await service.save(workspace),workspace);assert.deepEqual(calls,[['save',17,workspace]]);
 });
+test('external GitHub account switching cannot write an open workspace into a different account',async()=>{
+ let account={id:17,login:'first',name:'First'};const writes=[];
+ const auth={session:async()=>({account,offline:false,ghAvailable:true}),login:async()=>({account}),logout:async()=>{}};
+ const service=createService({auth,store:{load:async()=>workspace,save:async(id,data)=>{writes.push(id);return data;}}});
+ await service.session();await service.load();account={id:28,login:'second',name:'Second'};
+ await assert.rejects(service.save(workspace),/account changed/i);assert.deepEqual(writes,[]);
+ await service.session();await service.load();await service.save(workspace);assert.deepEqual(writes,[28]);
+});
 test('logout blocks subsequent saves without revoking shared GitHub credentials',async()=>{
  const {service,calls}=setup();await service.logout();await assert.rejects(service.save(workspace),/sign in/i);assert.equal(calls.length,0);
 });
