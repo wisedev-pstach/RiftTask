@@ -97,6 +97,23 @@ test('main boots only local dist with locked down BrowserWindow and denies navig
   h.electron.app.emit('activate');assert.equal(h.windows.length,2);
   h.electron.app.emit('will-quit');assert.equal(h.handlers.size,0);
 });
+test('chooseDirectory uses the native directory-only dialog and handles cancellation', async () => {
+  const {start}=require('../desktop/main.cjs');const h=fakeElectron();
+  const choices=[{canceled:false,filePaths:['/chosen/project']},{canceled:true,filePaths:[]}];
+  const calls=[];
+  h.electron.dialog.showOpenDialog=async (...args)=>{calls.push(args);return choices.shift();};
+  await start(h.electron,h.deps);
+  const win=h.windows[0];const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
+  const choose=h.handlers.get('rift:chooseDirectory');
+  assert.equal(await choose(event),'/chosen/project');
+  assert.equal(calls[0][0],win);
+  assert.deepEqual(calls[0][1],{title:'Choose project directory',properties:['openDirectory']});
+  assert.equal(await choose(event),null);
+  await assert.rejects(choose({...event,senderFrame:{url:indexURL}}),/Untrusted/);
+  await assert.rejects(choose(event,'/renderer/path'),/arguments/);
+  assert.equal(calls.length,2);
+});
+
 test('failed local page load reports a safe startup error and quits', async () => {
   const {start}=require('../desktop/main.cjs');const h=fakeElectron();
   const Base=h.electron.BrowserWindow;
@@ -113,7 +130,7 @@ test('second app instance quits before constructing any window or IPC', async ()
 
 test('deferred native integrations reject honestly instead of simulating success', async () => {
   const h=harness();
-  for(const method of ['openTerminal','gitStatus','chooseDirectory','exportBackup','importBackup']) {
+  for(const method of ['openTerminal','exportBackup','importBackup']) {
     const handler=h.handlers.get('rift:'+method);
     await assert.rejects(handler(h.event,...(['openTerminal','gitStatus'].includes(method)?['project-id']:[])),/not yet available/i);
     await assert.rejects(handler({...h.event,senderFrame:{url:indexURL}}),/Untrusted/);

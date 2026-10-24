@@ -32,8 +32,9 @@ export default function App({bridge: providedBridge = window.rift}) {
  const [session,setSession]=useState(null), [workspace,setWorkspace]=useState(null), [error,setError]=useState('');
  const [view,setView]=useState('all'), [editor,setEditor]=useState(null), [saving,setSaving]=useState(false);
  const [search,setSearch]=useState(''), [layout,setLayout]=useState('list'), [confirmDelete,setConfirmDelete]=useState(false);
- const lock=useRef(false), trigger=useRef(null);
+ const lock=useRef(false), trigger=useRef(null), context=useRef(0);
  const [notice,setNotice]=useState(''), [restorePrompt,setRestorePrompt]=useState(false), [connecting,setConnecting]=useState(false);
+ useEffect(()=>{context.current++;setNotice(current=>current.startsWith('Git ')?'':current);},[view,workspace]);
  useEffect(()=>{
   if(!editor&&!restorePrompt)return;
   const dialog=document.querySelector('[role="dialog"]');
@@ -53,13 +54,15 @@ export default function App({bridge: providedBridge = window.rift}) {
  async function nativeAction(method,arg){
   if(lock.current)return;
   lock.current=true;setSaving(true);setError('');setNotice('');
+  const requestContext=context.current;
   try {
    const result=await bridge[method](...(arg===undefined?[]:[arg]));
+   if(method==='gitStatus'&&requestContext===context.current)setNotice(result?`Git branch: ${result.branch} — ${result.changed} changed entries.`:'Git status unavailable: this project directory is not a Git repository.');
    if(method==='logout'){setWorkspace(null);setSession({account:null,offline:false,ghAvailable:session.ghAvailable});setView('all');setSearch('');setEditor(null);}
    if(method==='exportBackup'&&result)setNotice('Backup exported.');
    if(method==='importBackup'&&result){setWorkspace(result);setView('all');setNotice('Backup restored.');}
    if(method==='chooseDirectory'&&result){const input=document.querySelector('[name="localPath"]');if(input)input.value=result;}
-  }catch(e){setError(e.message||'Native action failed.');}
+  }catch(e){if(method!=='gitStatus'||requestContext===context.current)setError(e.message||'Native action failed.');}
   finally {lock.current=false;setSaving(false);setRestorePrompt(false);}
  }
  async function connect(login=false) {
@@ -108,7 +111,7 @@ export default function App({bridge: providedBridge = window.rift}) {
   <main>
    {session.offline&&<p className="offline-banner" role="status">Offline — using your last verified account. Data stays on this device.</p>}
    {bridge.preview&&<p className="preview-banner" role="status">Browser preview — session only. Changes disappear on reload; GitHub sign-in and native actions are unavailable.</p>}
-   <header><div><div className="eyebrow">OPERATE / WORKSPACE</div><h1>{project?.name||(view==='today'?'Today':'All tasks')}</h1><p>{project?.description||(view==='today'?'A deliberate focus for your day.':'Every next step, in one place.')}</p></div><div className="header-actions">{project&&<><button disabled={saving} onClick={()=>edit('project',project)}>Edit project</button><button disabled={saving||bridge.preview||!project.repositoryUrl} onClick={()=>nativeAction('openRepository',project.repositoryUrl)}>Open repository</button><button disabled={saving||bridge.preview||!project.localPath} onClick={()=>nativeAction('openTerminal',project.id)}>Open terminal</button></>}<button className="primary" disabled={!activeProjects.length||saving} onClick={()=>edit('task')}>New task</button></div></header>
+   <header><div><div className="eyebrow">OPERATE / WORKSPACE</div><h1>{project?.name||(view==='today'?'Today':'All tasks')}</h1><p>{project?.description||(view==='today'?'A deliberate focus for your day.':'Every next step, in one place.')}</p></div><div className="header-actions">{project&&<><button disabled={saving} onClick={()=>edit('project',project)}>Edit project</button><button disabled={saving||bridge.preview||!project.repositoryUrl} onClick={()=>nativeAction('openRepository',project.repositoryUrl)}>Open repository</button><button disabled={saving||bridge.preview||!project.localPath} onClick={()=>nativeAction('openTerminal',project.id)}>Open terminal</button><button disabled={saving||bridge.preview||!project.localPath} onClick={()=>nativeAction('gitStatus',project.id)}>Check Git status</button></>}<button className="primary" disabled={!activeProjects.length||saving} onClick={()=>edit('task')}>New task</button></div></header>
    <div className="toolbar"><input type="search" aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={e=>setSearch(e.target.value)}/><span>{tasks.length} {tasks.length===1?'task':'tasks'}</span><div className="view-switch" aria-label="Task layout"><button aria-pressed={layout==='list'} onClick={()=>setLayout('list')}>List</button><button aria-pressed={layout==='board'} onClick={()=>setLayout('board')}>Board</button></div></div>
    {notice&&<p role="status" className="notice">{notice}</p>}
    {error&&!editor&&<p role="alert">{error}</p>}

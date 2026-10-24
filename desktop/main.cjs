@@ -48,7 +48,10 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
     contents.setWindowOpenHandler(()=>({action:'deny'}));
     contents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
     contents.session.setPermissionCheckHandler(()=>false);
-    dispose = registerIpc({ipcMain,webContents:contents,indexURL,service,shell});
+    dispose = registerIpc({ipcMain,webContents:contents,indexURL,service,shell,chooseDirectory:async()=>{
+      const result=await dialog.showOpenDialog(current,{title:'Choose project directory',properties:['openDirectory']});
+      return result.canceled ? null : result.filePaths[0] ?? null;
+    }});
     current.once('ready-to-show',()=>current.show());
     current.on('closed',()=>{dispose();dispose=()=>{};window=null;});
     // Never load a dev URL or a renderer URL supplied through the environment.

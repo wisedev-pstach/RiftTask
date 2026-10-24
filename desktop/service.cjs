@@ -1,4 +1,5 @@
 'use strict';
+const {readGitStatus} = require('./git.cjs');
 function createService({auth,store}) {
   let boundAccount=null;
   async function refresh(method) {
@@ -20,7 +21,14 @@ function createService({auth,store}) {
     login:()=>refresh('login'),
     logout:async()=>{const state=await auth.logout();boundAccount=null;return state;},
     load:async()=>store.load(await accountId()),
-    save:async(workspace)=>store.save(await accountId(),workspace)
+    save:async(workspace)=>store.save(await accountId(),workspace),
+    gitStatus:async(projectId)=>{
+      if (typeof projectId!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId)) throw new Error('Invalid project ID.');
+      const workspace=await store.load(await accountId());
+      const project=workspace.projects.find(project=>project.id===projectId);
+      if (!project) throw new Error('Project not found in the active workspace.');
+      return readGitStatus(project.localPath);
+    }
   };
 }
 module.exports={createService};

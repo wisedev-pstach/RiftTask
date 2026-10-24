@@ -1,6 +1,6 @@
 'use strict';
 
-const BASIC_METHODS = Object.freeze({session:0,login:0,logout:0,load:0,save:1});
+const BASIC_METHODS = Object.freeze({session:0,login:0,logout:0,load:0,save:1,gitStatus:1});
 
 function repositoryURL(value) {
   const invalid = () => {throw new Error('Invalid repository URL. Use an HTTPS GitHub or Azure DevOps repository URL.');};
@@ -16,7 +16,7 @@ function repositoryURL(value) {
   return url.href;
 }
 
-function registerIpc({ipcMain,webContents,indexURL,service,shell}) {
+function registerIpc({ipcMain,webContents,indexURL,service,shell,chooseDirectory}) {
   const channels = [];
   const methods = {...BASIC_METHODS,openRepository:1,openTerminal:1,gitStatus:1,chooseDirectory:0,exportBackup:0,importBackup:0};
   for (const [name,arity] of Object.entries(methods)) {
@@ -28,6 +28,7 @@ function registerIpc({ipcMain,webContents,indexURL,service,shell}) {
       }
       if (args.length !== arity) throw new Error('Invalid IPC arguments.');
       if (name === 'openRepository') {await shell.openExternal(repositoryURL(args[0])); return;}
+      if (name === 'chooseDirectory') return chooseDirectory();
       if (!Object.hasOwn(BASIC_METHODS,name)) throw new Error(name+' is not yet available. Scheduled for the native-integration milestone.');
       return service[name](...args);
     });

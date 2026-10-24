@@ -7,7 +7,7 @@ Create a private desktop task app for wisedev. Categories → projects → manua
 - Repository: https://github.com/wisedev-pstach/RiftTask (private; created and read back).
 - Local: /opt/data/projects/RiftTask, git main.
 - GitHub CLI: /opt/data/bin/gh, authenticated wisedev-pstach; token has repo/read:org/gist, NOT workflow scope. Existing credential file owner-only must stay private. Never print tokens.
-- Initial deps installing; backend/UI agents working. Parent must update this file before closing first milestone.
+- Dependencies installed; initial backend/UI agents completed. Current continuation status and evidence are recorded below.
 - Persistent disk started with 18 GB free. Check before building; never accumulate installer/build caches unchecked.
 
 ## Architecture
@@ -30,8 +30,8 @@ This file is the durable task home, not persistent memory. At each scheduled pas
 - Private repo creation verified via gh repo view.
 - Dependencies: current versions looked up in npm registry with system CA; no TLS verification disabled.
 
-## Current status
-FIRST MILESTONE VERIFIED LOCALLY; all source is ready for the parent private push (remote SHA checked after push).
+## Foundation milestone (historical baseline)
+FIRST MILESTONE VERIFIED AND PUSHED: `f79bb520b4c7c4e22da5b544b4387646493e156b` matched private remote main at the start of the first continuation pass.
 
 - Core/domain, account-isolated disk store, gh identity adapter, secure Electron shell, React task UI all implemented.
 - Parent final rerun `npm test`: **27 core/shell/service tests + 13 renderer DOM tests passed**, production Vite build passed. This includes a regression observed RED then fixed: external gh account switching cannot redirect an open workspace into another account's storage.
@@ -44,3 +44,13 @@ FIRST MILESTONE VERIFIED LOCALLY; all source is ready for the parent private pus
 - Scheduled job ff747c1cbab3 is enabled for seven six-hour passes, first 2026-10-24 18:57 UTC. This is continuation schedule, not evidence future work completed.
 
 No release, one-command installer, cloud sync, provider issue import, or native Windows/macOS verification yet. Keep work paced; complete remaining ordered items during scheduled passes.
+
+## Current continuation status — 2026-10-24, first scheduled pass
+- Completed a bounded native-integration slice: the existing Choose directory UI now invokes Electron's directory-only dialog; cancellation returns null. Trusted sender/arity rules still apply.
+- Check Git status now explicitly displays a saved project's local branch and changed-entry count. Resolves directory only from persisted active-account data using a validated project ID, never renderer shell text or a renderer-selected account/path. No automatic status polling, fetch, remote provider issues/tasks or scripts.
+- Git runner strips inherited GIT_* overrides, disables optional index locks, fsmonitor and all configured clean/process filter drivers, ignores submodule internals, uses argument arrays/shell:false, and caps time/output. Counts porcelain entries (untracked directory = one entry); disabled filters may conservatively report changes that a normal configured clean filter would normalize away.
+- Independent review identified a real clean-filter execution risk. Reproduced RED with an equal-size changed tracked file, fixed and observed GREEN; follow-up read-only review found no blockers. Also fixed late Git success/error leakage across project switches via RED/GREEN renderer tests. See docs/native-evidence.md and docs/ui-git-evidence.md.
+- Parent final verification: `npm test` **34 core/shell/service/native tests + 15 renderer tests passed**; `npm run build` passed; changed desktop modules passed `node --check`; `git diff --check` clean. Real Git fixture integration ran on Linux; directory dialog testing uses injected Electron, NOT native GUI execution.
+- Repository visibility rechecked PRIVATE. Private main push/readback is verified after committing this slice; see the run's delivery report for the exact SHA. No workflows, releases or auth changes in this pass.
+- Next bounded slice: native terminal launch from persisted project path with hostile argument/path tests. Then gh GUI executable discovery + login onboarding, backup export/import, authenticated installers and Windows/macOS CI/package verification as ordered above.
+- Known blockers unchanged: host missing GTK prevents real Electron smoke; Windows/macOS not available here; token lacks workflow scope (do not stage/push workflow changes or bypass permission). No functional installer/release yet. Disk remained 18 GB free at pass start.

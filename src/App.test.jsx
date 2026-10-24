@@ -9,6 +9,55 @@ export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[]
 }
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
+ it('checks project-local Git status only on request and keeps results in their project context',async()=>{
+ const w=populated();w.projects.push({...w.projects[0],id:'other',name:'Other project',localPath:''});
+ const api=bridge(w);api.gitStatus=vi.fn().mockResolvedValue({branch:'feature/local',changed:3});
+ const u=userEvent.setup();const {unmount}=render(<App bridge={api}/>);await screen.findByRole('heading',{name:'All tasks'});
+ expect(api.gitStatus).not.toHaveBeenCalled();
+ await u.click(screen.getByRole('button',{name:'lose.DOT'}));
+ expect(api.gitStatus).not.toHaveBeenCalled();
+ await u.click(screen.getByRole('button',{name:'Check Git status'}));
+ expect(api.gitStatus).toHaveBeenCalledExactlyOnceWith('project');
+ expect(await screen.findByRole('status')).toHaveTextContent('Git branch: feature/local — 3 changed entries.');
+ await u.click(screen.getByRole('button',{name:'Other project'}));
+ expect(screen.queryByText(/Git branch:/)).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Check Git status'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'lose.DOT'}));
+ expect(screen.queryByText(/Git branch:/)).not.toBeInTheDocument();expect(api.gitStatus).toHaveBeenCalledTimes(1);
+ api.gitStatus.mockResolvedValueOnce(null);
+ await u.click(screen.getByRole('button',{name:'Check Git status'}));
+ expect(await screen.findByRole('status')).toHaveTextContent('Git status unavailable: this project directory is not a Git repository.');
+ api.gitStatus.mockRejectedValueOnce(new Error('Git unavailable'));
+ await u.click(screen.getByRole('button',{name:'Check Git status'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Git unavailable');
+ let resolveStatus;api.gitStatus.mockImplementationOnce(()=>new Promise(resolve=>{resolveStatus=resolve;}));
+ await u.click(screen.getByRole('button',{name:'Check Git status'}));
+ expect(screen.getByRole('button',{name:'Check Git status'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'Other project'}));
+ resolveStatus({branch:'late-result',changed:0});
+ await waitFor(()=>expect(screen.getByRole('button',{name:'New task'})).toBeEnabled());
+ expect(screen.queryByText(/late-result/)).not.toBeInTheDocument();
+ await u.click(screen.getByRole('button',{name:'lose.DOT'}));
+ expect(screen.queryByText(/late-result/)).not.toBeInTheDocument();
+ unmount();render(<App bridge={{...bridge(w),preview:true}}/>);
+ await screen.findByRole('heading',{name:'All tasks'});await u.click(screen.getByRole('button',{name:'lose.DOT'}));
+ expect(screen.getByRole('button',{name:'Check Git status'})).toBeDisabled();
+ });
+ it('does not show a late Git status error after switching projects',async()=>{
+ const w=populated();w.projects.push({...w.projects[0],id:'other',name:'Other project'});
+ const api=bridge(w);let rejectStatus;
+ api.gitStatus=vi.fn().mockImplementationOnce(()=>new Promise((resolve,reject)=>{rejectStatus=reject;}));
+ const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'All tasks'});
+ await u.click(screen.getByRole('button',{name:'lose.DOT'}));
+ await u.click(screen.getByRole('button',{name:'Check Git status'}));
+ expect(api.gitStatus).toHaveBeenCalledExactlyOnceWith('project');
+ expect(screen.getByRole('button',{name:'Check Git status'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'Other project'}));
+ expect(screen.getByRole('heading',{name:'Other project'})).toBeInTheDocument();
+ rejectStatus(new Error('Old project Git failed'));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Check Git status'})).toBeEnabled());
+ expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+ });
  it('keeps persisted status when a status update fails',async()=>{
  const w=populated();w.tasks.push({id:'task',projectId:'project',title:'Ship build',notes:'',status:'doing',priority:'normal',dueDate:'',today:false,createdAt:new Date().toISOString(),completedAt:null});
  const api=bridge(w);api.save.mockRejectedValueOnce(new Error('Write denied'));
