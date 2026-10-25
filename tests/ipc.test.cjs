@@ -130,7 +130,7 @@ test('second app instance quits before constructing any window or IPC', async ()
 
 test('deferred native integrations reject honestly instead of simulating success', async () => {
   const h=harness();
-  for(const method of ['openTerminal','exportBackup','importBackup']) {
+  for(const method of ['exportBackup','importBackup']) {
     const handler=h.handlers.get('rift:'+method);
     await assert.rejects(handler(h.event,...(['openTerminal','gitStatus'].includes(method)?['project-id']:[])),/not yet available/i);
     await assert.rejects(handler({...h.event,senderFrame:{url:indexURL}}),/Untrusted/);

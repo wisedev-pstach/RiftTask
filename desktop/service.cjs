@@ -1,6 +1,7 @@
 'use strict';
 const {readGitStatus} = require('./git.cjs');
-function createService({auth,store}) {
+const {openTerminalDirectory} = require('./terminal.cjs');
+function createService({auth,store,launchTerminal=openTerminalDirectory}) {
   let boundAccount=null;
   async function refresh(method) {
     const state=await auth[method]();
@@ -22,6 +23,13 @@ function createService({auth,store}) {
     logout:async()=>{const state=await auth.logout();boundAccount=null;return state;},
     load:async()=>store.load(await accountId()),
     save:async(workspace)=>store.save(await accountId(),workspace),
+    openTerminal:async(projectId)=>{
+      if (typeof projectId!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId)) throw new Error('Invalid project ID.');
+      const workspace=await store.load(await accountId());
+      const project=workspace.projects.find(project=>project.id===projectId);
+      if (!project) throw new Error('Project not found in the active workspace.');
+      await launchTerminal(project.localPath);
+    },
     gitStatus:async(projectId)=>{
       if (typeof projectId!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId)) throw new Error('Invalid project ID.');
       const workspace=await store.load(await accountId());

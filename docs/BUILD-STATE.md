@@ -45,7 +45,7 @@ FIRST MILESTONE VERIFIED AND PUSHED: `f79bb520b4c7c4e22da5b544b4387646493e156b` 
 
 No release, one-command installer, cloud sync, provider issue import, or native Windows/macOS verification yet. Keep work paced; complete remaining ordered items during scheduled passes.
 
-## Current continuation status — 2026-10-24, first scheduled pass
+## Current continuation status — 2026-10-24, first scheduled pass (historical)
 - Completed a bounded native-integration slice: the existing Choose directory UI now invokes Electron's directory-only dialog; cancellation returns null. Trusted sender/arity rules still apply.
 - Check Git status now explicitly displays a saved project's local branch and changed-entry count. Resolves directory only from persisted active-account data using a validated project ID, never renderer shell text or a renderer-selected account/path. No automatic status polling, fetch, remote provider issues/tasks or scripts.
 - Git runner strips inherited GIT_* overrides, disables optional index locks, fsmonitor and all configured clean/process filter drivers, ignores submodule internals, uses argument arrays/shell:false, and caps time/output. Counts porcelain entries (untracked directory = one entry); disabled filters may conservatively report changes that a normal configured clean filter would normalize away.
@@ -54,3 +54,12 @@ No release, one-command installer, cloud sync, provider issue import, or native 
 - Repository visibility rechecked PRIVATE. Private main push/readback is verified after committing this slice; see the run's delivery report for the exact SHA. No workflows, releases or auth changes in this pass.
 - Next bounded slice: native terminal launch from persisted project path with hostile argument/path tests. Then gh GUI executable discovery + login onboarding, backup export/import, authenticated installers and Windows/macOS CI/package verification as ordered above.
 - Known blockers unchanged: host missing GTK prevents real Electron smoke; Windows/macOS not available here; token lacks workflow scope (do not stage/push workflow changes or bypass permission). No functional installer/release yet. Disk remained 18 GB free at pass start.
+
+## Current continuation status — 2026-10-25, native terminal slice
+- Open terminal now dispatches through trusted IPC and the active account's persisted project ID/path. Rejects extra command arguments, renderer paths as IDs, missing projects, unavailable/non-directory paths, NUL/CR/LF, disconnected and switched accounts.
+- Added `desktop/terminal.cjs`: macOS Terminal via opaque `/usr/bin/open` arguments (10-second launcher timeout), Windows system PowerShell with no profile/command text and persisted cwd, Linux `/usr/bin/x-terminal-emulator` with persisted cwd. No project script or provider task fetch.
+- Linux/Windows check early failures for 300 ms before detaching; success acknowledges startup, not confirmed visible window or future process health. Native execution remains unverified. Windows PowerShell is deliberately used rather than relying on Windows Terminal being installed.
+- Strict RED/GREEN cycles and independent review recorded in `docs/terminal-evidence.md`. Review identified and regression-tested immediate nonzero terminal exit incorrectly reporting success; fixed, follow-up review approved.
+- Final `npm test`: **39 core/native/integration + 15 renderer passed**. Production Vite build, changed-module syntax checks, and whitespace check passed. Repository rechecked PRIVATE; push/readback recorded in the run delivery. Disk 18 GB free at pass start.
+- Next bounded slice: gh GUI executable discovery and native login onboarding with Check sign-in, then validated backup export/import. Native directory/Git/terminal implementation is now present but Windows/macOS runtime smoke is still mandatory before claiming platform support verified.
+- Remaining: backup/restore and migration strategy, login onboarding hardening, authenticated one-command installers, native packaging/CI and final acceptance/security review. GTK/native platform/workflow-scope blockers remain unchanged. No release or functional installer yet.
