@@ -23,6 +23,15 @@ test('rejected credentials clear offline identity so later network failure canno
  const cachePath=temp(t);let mode='ok';const run=async()=>{if(mode==='ok')return JSON.stringify({id:1,login:'dev'});if(mode==='denied')throw Object.assign(new Error('denied'),{code:1,stderr:'HTTP 401'});throw Object.assign(new Error('offline'),{code:'ENOTFOUND'});};
  const a=createAuth({cachePath,run});await a.login();mode='denied';assert.equal((await a.session()).account,null);mode='offline';assert.equal((await a.session()).account,null);assert.equal((await createAuth({cachePath,run}).session()).account,null);
 });
+test('default auth runner finds home-bin gh when a Linux GUI has no gh on PATH',{skip:process.platform!=='linux'},async t=>{
+ const cachePath=temp(t),root=path.dirname(cachePath),bin=path.join(root,'bin');
+ fs.mkdirSync(bin);
+ fs.writeFileSync(path.join(bin,'gh'),'#!/bin/sh\nprintf \'%s\' \'{"id":42,"login":"gui-dev"}\'\n',{mode:0o700});
+ const {execFileSync}=require('node:child_process');
+ const code=`const cp=require('node:child_process'),{promisify}=require('node:util');const real=promisify(cp.execFile);cp.execFile[promisify.custom]=async(file,args,options)=>{if(file===${JSON.stringify(path.join(bin,'gh'))})return real(file,args,options);throw Object.assign(new Error('fixture PATH miss'),{code:'ENOENT'});};require(${JSON.stringify(require.resolve('../desktop/auth.cjs'))}).createAuth().session().then(s=>process.stdout.write(JSON.stringify(s)))`;
+ const actual=JSON.parse(execFileSync(process.execPath,['-e',code],{env:{...process.env,HOME:root,PATH:path.join(root,'empty-path')},encoding:'utf8',timeout:10000}));
+ assert.deepEqual(actual,{account:{id:42,login:'gui-dev',name:'gui-dev'},offline:false,ghAvailable:true});
+});
 function temp(t){const root=fs.mkdtempSync(path.join(process.env.TMPDIR||os.tmpdir(),'rifttask-auth-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return path.join(root,'identity.json');}
 test('session verifies numeric GitHub identity using gh without exposing response extras',async t=>{
  const calls=[],cachePath=temp(t);const auth=createAuth({cachePath,run:async(...args)=>{calls.push(args);return JSON.stringify({id:123,login:'wise-dev',name:null,token:'never-cache',email:'not-needed'});}});

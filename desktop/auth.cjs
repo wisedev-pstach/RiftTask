@@ -1,7 +1,7 @@
 'use strict';
-const {execFile}=require('node:child_process');const {promisify}=require('node:util');const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
-const execute=promisify(execFile);
-async function defaultRun(file,args,options){return (await execute(file,args,options)).stdout;}
+const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
+const {createGhRunner}=require('./gh.cjs');
+const defaultRun=createGhRunner();
 function identity(raw){
  if(!raw||!Number.isSafeInteger(raw.id)||raw.id<=0||typeof raw.login!=='string'||!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/.test(raw.login)||raw.name!==null&&raw.name!==undefined&&(typeof raw.name!=='string'||raw.name.length>200||raw.name.includes('\0')))throw new Error('Invalid GitHub identity');
  return {id:raw.id,login:raw.login,name:raw.name||raw.login};
