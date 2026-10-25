@@ -2,8 +2,28 @@
 const {readGitStatus} = require('./git.cjs');
 const {openTerminalDirectory} = require('./terminal.cjs');
 const fs=require('node:fs');
-const {validateWorkspace}=require('./core.cjs');
-function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath}) {
+const {validateWorkspace,MAX_BYTES}=require('./core.cjs');
+function readBackup(source){
+  let fd,text;
+  try{
+    if(!fs.lstatSync(source).isFile())throw new Error('Not a regular file');
+    fd=fs.openSync(source,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0)|(fs.constants.O_NONBLOCK||0));
+    const stat=fs.fstatSync(fd);
+    if(!stat.isFile()||stat.size>MAX_BYTES)throw new Error('Invalid file size or type');
+    // Read at most limit+1 even if the file grows after fstat.
+    const buffer=Buffer.alloc(MAX_BYTES+1);let length=0;
+    while(length<buffer.length){const count=fs.readSync(fd,buffer,length,buffer.length-length,null);if(!count)break;length+=count;}
+    if(length>MAX_BYTES)throw new Error('Size limit');
+    text=buffer.toString('utf8',0,length);
+    const closing=fd;fd=undefined;fs.closeSync(closing);
+  }catch{
+    if(fd!==undefined){try{fs.closeSync(fd);}catch{}}
+    throw new Error('Could not read backup. Choose a regular JSON file no larger than 8 MiB.');
+  }
+  try{return validateWorkspace(JSON.parse(text));}
+  catch{throw new Error('Invalid backup. A valid version-1 RiftTask workspace is required; no data was replaced.');}
+}
+function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath}) {
   let boundAccount=null;
   async function refresh(method) {
     const state=await auth[method]();
@@ -47,6 +67,15 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
         throw new Error(error.code==='EEXIST'?'Backup destination already exists. Choose a new filename; existing files are never replaced.':incomplete?'Could not export backup. An incomplete destination could not be removed; delete it before retrying.':'Could not export backup. Choose a writable destination and retry.');
       }
       return true;
+    },
+    importBackup:async()=>{
+      const id=await accountId();
+      const source=await chooseImportPath();
+      if(!source)return null;
+      if(await accountId()!==id)throw new Error('GitHub account changed. Retry backup import.');
+      const workspace=readBackup(source);
+      if(await accountId()!==id)throw new Error('GitHub account changed. Retry backup import.');
+      return store.save(id,workspace);
     },
     load:async()=>store.load(await accountId()),
     save:async(workspace)=>store.save(await accountId(),workspace),

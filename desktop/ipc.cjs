@@ -1,6 +1,6 @@
 'use strict';
 
-const BASIC_METHODS = Object.freeze({session:0,login:0,logout:0,load:0,save:1,exportBackup:0,gitStatus:1,openTerminal:1});
+const BASIC_METHODS = Object.freeze({session:0,login:0,logout:0,load:0,save:1,exportBackup:0,importBackup:0,gitStatus:1,openTerminal:1});
 
 function repositoryURL(value) {
   const invalid = () => {throw new Error('Invalid repository URL. Use an HTTPS GitHub or Azure DevOps repository URL.');};

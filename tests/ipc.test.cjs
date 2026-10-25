@@ -148,11 +148,21 @@ test('export backup uses a native save dialog behind trusted zero-argument IPC',
   assert.equal(await handler(event),false);assert.equal(dialogs,2);
 });
 
-test('deferred native integrations reject honestly instead of simulating success', async () => {
-  const h=harness();
-  for(const method of ['importBackup']) {
-    const handler=h.handlers.get('rift:'+method);
-    await assert.rejects(handler(h.event,...(['openTerminal','gitStatus'].includes(method)?['project-id']:[])),/not yet available/i);
-    await assert.rejects(handler({...h.event,senderFrame:{url:indexURL}}),/Untrusted/);
-  }
+test('import uses a native single-file dialog through trusted zero-argument IPC',async t=>{
+ const os=require('node:os');const {createStore}=require('../desktop/store.cjs');
+ const {createService}=require('../desktop/service.cjs');const {emptyWorkspace,createSampleWorkspace}=require('../desktop/core.cjs');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'rift-import-ipc-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const h=fakeElectron();const source=path.join(root,'backup.json');const incoming=createSampleWorkspace();fs.writeFileSync(source,JSON.stringify(incoming));let dialogs=0;
+ h.electron.dialog.showOpenDialog=async(win,options)=>{
+  assert.equal(win,h.windows[0]);assert.equal(options.title,'Import workspace backup');
+  assert.deepEqual(options.properties,['openFile']);assert.deepEqual(options.filters,[{name:'JSON workspace',extensions:['json']}]);
+  return ++dialogs===1?{canceled:false,filePaths:[source]}:{canceled:true,filePaths:[]};
+ };
+ const store=createStore(path.join(root,'app'));store.save(17,emptyWorkspace());
+ await require('../desktop/main.cjs').start(h.electron,{createAuth:()=>({session:async()=>({account:{id:17}})}),createStore:()=>store,createService});
+ const win=h.windows[0];const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};const handler=h.handlers.get('rift:importBackup');
+ await assert.rejects(handler({...event,senderFrame:{url:indexURL}}),/Untrusted/);
+ await assert.rejects(handler(event,source),/arguments/);assert.equal(dialogs,0);
+ assert.deepEqual(await handler(event),incoming);assert.deepEqual(store.load(17),incoming);
+ assert.equal(await handler(event),null);assert.equal(dialogs,2);
 });
