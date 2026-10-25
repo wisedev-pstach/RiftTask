@@ -128,9 +128,29 @@ test('second app instance quits before constructing any window or IPC', async ()
   await start(h.electron,h.deps); assert.equal(h.quitCount(),1);assert.equal(h.windows.length,0);assert.equal(h.handlers.size,0);
 });
 
+test('export backup uses a native save dialog behind trusted zero-argument IPC',async t=>{
+  const os=require('node:os');const {createStore}=require('../desktop/store.cjs');
+  const {createService}=require('../desktop/service.cjs');const {emptyWorkspace}=require('../desktop/core.cjs');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'rift-export-ipc-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const h=fakeElectron();const target=path.join(root,'export.json');let dialogs=0;
+  h.electron.dialog.showSaveDialog=async(win,options)=>{
+    assert.equal(win,h.windows[0]);assert.equal(options.title,'Export workspace backup');
+    assert.match(options.defaultPath,/\.json$/);assert.deepEqual(options.filters,[{name:'JSON workspace',extensions:['json']}]);
+    dialogs++;return dialogs===1?{canceled:false,filePath:target}:{canceled:true};
+  };
+  const store=createStore(path.join(root,'app'));const workspace=emptyWorkspace();store.save(17,workspace);
+  await require('../desktop/main.cjs').start(h.electron,{createAuth:()=>({session:async()=>({account:{id:17}})}),createStore:()=>store,createService});
+  const win=h.windows[0];const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
+  const handler=h.handlers.get('rift:exportBackup');
+  await assert.rejects(handler({...event,senderFrame:{url:indexURL}}),/Untrusted/);
+  await assert.rejects(handler(event,'/renderer/path'),/arguments/);assert.equal(dialogs,0);
+  assert.equal(await handler(event),true);assert.deepEqual(JSON.parse(fs.readFileSync(target,'utf8')),workspace);
+  assert.equal(await handler(event),false);assert.equal(dialogs,2);
+});
+
 test('deferred native integrations reject honestly instead of simulating success', async () => {
   const h=harness();
-  for(const method of ['exportBackup','importBackup']) {
+  for(const method of ['importBackup']) {
     const handler=h.handlers.get('rift:'+method);
     await assert.rejects(handler(h.event,...(['openTerminal','gitStatus'].includes(method)?['project-id']:[])),/not yet available/i);
     await assert.rejects(handler({...h.event,senderFrame:{url:indexURL}}),/Untrusted/);
