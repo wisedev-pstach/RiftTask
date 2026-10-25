@@ -13,6 +13,14 @@ Create a private desktop task app for wisedev. Categories → projects → manua
 ## Architecture
 Read AGENTS.md for exact bridge/schema and test discipline. Electron/React/Vite. Local JSON persistence isolated by verified numeric GitHub ID with atomic writes/backups. Sign-in through official installed gh CLI avoids registering/borrowing an OAuth application. Account data persists on this device; no cloud sync yet. Explain this honestly. Private repository installation must use authenticated downloads, NOT public raw URLs.
 
+## Latest user priorities — authoritative over older baseline
+- CLOUD PERSISTENCE IS NOT IMPLEMENTED. User explicitly requests moving persistent per-account CLOUD data/sync higher on the backlog, ahead of installer polish and ancillary features. Local JSON plus manual backup is not cloud storage. Design and implement a zero-paid-backend, explicitly authorized account-scoped sync route; do not deploy external services, upload private task data, create Gists/repos holding data, or silently expand OAuth scopes without appropriate consent. Distinguish implemented sync from design and real cross-device verification.
+- Simplify workflow to Backlog / In progress / Done only. Migrate existing `next` tasks losslessly to backlog; retain current doing/done meanings.
+- Add project-scoped milestone labels assignable to tasks plus a Milestones view showing assigned tasks and completion.
+- Replace the button-heavy project header with feature tabs. User wants a real embedded interactive terminal docked at the bottom of each project, with its live session retained when switching project/feature tabs, NOT a button that opens an external OS terminal. Existing native terminal launcher is only an interim implementation. Use secure PTY IPC scoped to active account/project, lifecycle cleanup and no arbitrary background commands. Native module packaging/platform validation required.
+- Include CURRENT real screenshots with every RiftTask progress update. Label any example data/browser preview honestly. Do not reuse old images as evidence of new features; if capture is blocked, say so plainly. Screenshot artifacts belong under ignored artifacts/screenshots/.
+- These changes were requested after earlier screenshots and are NOT implemented as of commit 580265c. Do not report them as delivered or keep prioritizing the obsolete external-terminal/button-heavy design.
+
 ## Ordered remaining work
 1. Verify initial core/UI and Electron bridge foundation; tests/build and private push. This is first milestone, not a finished release.
 2. GitHub/Azure repository URL validation; native directory selection; read-only local git branch/change count; native terminal launched in chosen workspace. No auto executing arbitrary project scripts, no fetch provider tasks. Test malicious URLs/paths and arguments.
