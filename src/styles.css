@@ -41,6 +41,23 @@ aside section {margin:4px 0}
 .dot {height:6px;width:6px;border-radius:50%;flex-shrink:0}
 .category button {margin-left:auto;background:none;border:0;font-size:10px;padding:3px 5px;color:#95959a;opacity:0}
 .category:hover button,.category button:focus-visible {opacity:1}
+.category button:first-of-type {opacity:1;margin-left:0;color:inherit;font:inherit;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.category button:last-child {flex-shrink:0}
+.project-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:18px;align-items:start}
+.project-tile {display:flex;flex-direction:column;align-items:flex-start;gap:12px;min-height:166px;padding:24px;text-align:left;white-space:normal;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.project-tile strong {font-size:18px;font-weight:600;color:#eeeae4}
+.project-tile span {font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.project-grid .empty {grid-column:1/-1}
+.feature-tabs {display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:22px;padding-bottom:10px}
+.feature-tabs button {background:transparent;border-color:transparent;color:var(--muted)}
+.feature-tabs button[aria-selected=true] {color:var(--amber);border-color:#665238;background:#302b24}
+.project-details {padding:24px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.project-details p {color:var(--muted);margin:12px 0;overflow-wrap:anywhere}
+.project-details dl {margin:24px 0}
+.project-details dt {color:var(--muted);font-size:11px;margin-top:14px}
+.project-details dd {margin:5px 0;overflow-wrap:anywhere}
+.detail-actions {display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+.detail-actions button {white-space:normal}
 .project-link {display:block;width:100%;background:none;border-color:transparent;text-align:left;padding:7px 10px 7px 26px;margin:1px 0;font-size:12px;overflow:hidden;text-overflow:ellipsis}
 .project-link::before {content:'▱';color:#797a80;margin-right:9px}
 .archives {margin:22px 10px;color:#949499;font-size:11px}

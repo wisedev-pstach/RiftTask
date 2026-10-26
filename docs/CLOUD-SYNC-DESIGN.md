@@ -1,4 +1,6 @@
-# Account cloud persistence — proposed route, NOT implemented
+# Account cloud persistence — snapshot helpers only, NOT sync
+
+Pure canonical projection and restore preparation are now implemented in `desktop/cloud-snapshot.cjs` with no runtime caller, network or storage side effect. See `cloud-snapshot-evidence.md`. They strip outbound local paths, retain this device's mappings by project ID on proposed restore, bind numeric scope IDs, reject unsupported fields/formats, and bound UTF-8 JSON to **512 KiB including envelope**. They do not verify consent, active identity, repository ownership/privacy or transfer permission. Those gates, transport and opt-in UI remain unimplemented. No cloud workspace has been transferred.
 
 Cloud implementation is the next priority, ahead of installers, login-terminal polish and ancillary work. The three-status compatibility change is now the canonical workspace baseline, not evidence of cloud persistence.
 
