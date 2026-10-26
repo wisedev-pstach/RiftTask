@@ -22,7 +22,9 @@ All methods return Promises. Renderer MUST NOT import Node.
 - exportBackup(): boolean (native save dialog)
 - importBackup(): Workspace|null (native open dialog, validation, backup of current data)
 
-Workspace = {version:1,categories:[{id,name,color}],projects:[{id,categoryId,name,description,repositoryUrl,localPath,archived:boolean}],tasks:[{id,projectId,title,notes,status:'backlog'|'next'|'doing'|'done',priority:'low'|'normal'|'high',dueDate:'YYYY-MM-DD'|'',today:boolean,createdAt:ISO,completedAt:ISO|null}],updatedAt:ISO}.
+Workspace = {version:1,categories:[{id,name,color}],projects:[{id,categoryId,name,description,repositoryUrl,localPath,archived:boolean}],tasks:[{id,projectId,title,notes,status:'backlog'|'doing'|'done',priority:'low'|'normal'|'high',dueDate:'YYYY-MM-DD'|'',today:boolean,createdAt:ISO,completedAt:ISO|null}],updatedAt:ISO}.
+Legacy version-1 input with exact status `next` is accepted and normalized to `backlog` without dropping tasks or changing other known fields. Loading a valid legacy file does not rewrite it; explicit save stores canonical values and the existing rolling backup contains the normalized previous workspace, not raw original bytes.
+
 Blank account starts empty. Optional explicit sample workspace button can seed Games / lose.DOT, clearly labeled sample and never pretend imported data. Renderer builds IDs with crypto.randomUUID. Core normalizes/validates values with limits, referential integrity and safe IDs. Categories/projects with descendants cannot silently delete them: explicit confirmation/cascade or archive. Task UI: create/edit/delete, status, priority, due, notes, Today pin; category/project create/edit; search, Today, all tasks, board/list; empty/error/loading states; keyboard-friendly forms; project context for repository and terminal.
 
 ## Ownership while building

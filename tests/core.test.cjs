@@ -9,11 +9,39 @@ test('validates all schema fields, limits and references without mutation',()=>{
  for(const mutate of cases){const x=fixture();mutate(x);assert.throws(()=>core.validateWorkspace(x),/Invalid workspace/);}
  assert.throws(()=>core.validateWorkspace(null),/Invalid workspace/);
 });
+test('legacy next normalizes to backlog preserving every known task field without mutation',()=>{
+ const w=fixture();
+ w.tasks[0]={...w.tasks[0],title:'Keep this title',notes:'Notes 🎮\nwith another line',priority:'high',today:true,completedAt:'2026-02-01T12:34:56.123Z'};
+ const before=structuredClone(w);
+ Object.freeze(w.tasks[0]);Object.freeze(w.tasks);Object.freeze(w);
+ const clean=core.validateWorkspace(w);
+ assert.deepEqual(clean,{...before,tasks:[{...before.tasks[0],status:'backlog'}]});
+ assert.deepEqual(w,before);
+ assert.notEqual(clean,w);assert.notEqual(clean.tasks,w.tasks);assert.notEqual(clean.tasks[0],w.tasks[0]);
+});
+test('canonical statuses remain unchanged and normalization is idempotent',()=>{
+ const w=fixture();
+ w.tasks=['backlog','doing','done','next'].map((status,i)=>({...w.tasks[0],id:'task-'+i,status,completedAt:status==='done'?'2026-01-02T00:00:00.000Z':null}));
+ const clean=core.validateWorkspace(w);
+ assert.deepEqual(clean.tasks,w.tasks.map(task=>({...task,status:task.status==='next'?'backlog':task.status})));
+ assert.deepEqual(core.validateWorkspace(clean),clean);
+ for(const status of ['Next',' next','next ','in progress','',null,1,{},['next']]){
+  const bad=fixture();bad.tasks[0].status=status;
+  assert.throws(()=>core.validateWorkspace(bad),/Invalid workspace: enum/);
+ }
+});
+test('legacy tasks must still satisfy every other validation rule',()=>{
+ for(const mutate of [x=>x.title='',x=>x.notes=123,x=>x.projectId='missing',x=>x.priority='urgent',x=>x.dueDate='2027-02-29',x=>x.today=1,x=>x.createdAt='bad',x=>x.completedAt='bad']){
+  const w=fixture();mutate(w.tasks[0]);const before=structuredClone(w);
+  assert.throws(()=>core.validateWorkspace(w),/Invalid workspace/);assert.deepEqual(w,before);
+ }
+ const w=fixture();w.tasks.push({...w.tasks[0]});assert.throws(()=>core.validateWorkspace(w),/duplicate id/);
+});
 test('UTF-8 payload size is capped even when every field and count is in bounds',()=>{
  const w=fixture();const task=w.tasks[0];w.tasks=Array.from({length:220},(_,i)=>({...task,id:'task-'+i,notes:'💥'.repeat(10000)}));assert.throws(()=>core.validateWorkspace(w),/Invalid workspace: size/);
 });
 test('explicit sample generator is valid and never seeds a blank workspace',()=>{
- const sample=core.createSampleWorkspace();assert.equal(sample.categories[0].name,'Games');assert.equal(sample.projects[0].name,'lose.DOT (sample)');assert.equal(sample.tasks.length,1);assert.deepEqual(core.validateWorkspace(sample),sample);assert.deepEqual(core.emptyWorkspace().tasks,[]);assert.notEqual(sample.tasks,core.createSampleWorkspace().tasks);
+ const sample=core.createSampleWorkspace();assert.equal(sample.tasks[0].status,'backlog');assert.equal(sample.categories[0].name,'Games');assert.equal(sample.projects[0].name,'lose.DOT (sample)');assert.equal(sample.tasks.length,1);assert.deepEqual(core.validateWorkspace(sample),sample);assert.deepEqual(core.emptyWorkspace().tasks,[]);assert.notEqual(sample.tasks,core.createSampleWorkspace().tasks);
 });
 test('empty workspace is fresh, versioned and valid',()=>{
  const a=core.emptyWorkspace(); assert.deepEqual(a.categories,[]); assert.deepEqual(a.projects,[]); assert.deepEqual(a.tasks,[]); assert.equal(a.version,1); assert.ok(Number.isFinite(Date.parse(a.updatedAt))); assert.deepEqual(core.validateWorkspace(a),a); assert.notEqual(a,core.emptyWorkspace());

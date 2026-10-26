@@ -17,7 +17,7 @@ function validateWorkspace(input){
  const categoryIds=new Set(categories.map(x=>x.id));
  const projects=read('projects',5000,x=>{if(!categoryIds.has(x.categoryId))invalid('category reference');return {id:id(x.id),categoryId:id(x.categoryId),name:text(x.name,'name',200,true),description:text(x.description,'description',20000),repositoryUrl:repo(x.repositoryUrl),localPath:text(x.localPath,'localPath',4096),archived:bool(x.archived)};});
  const projectIds=new Set(projects.map(x=>x.id));
- const tasks=read('tasks',10000,x=>{if(!projectIds.has(x.projectId))invalid('project reference');return {id:id(x.id),projectId:id(x.projectId),title:text(x.title,'title',300,true),notes:text(x.notes,'notes',20000),status:choice(x.status,['backlog','next','doing','done']),priority:choice(x.priority,['low','normal','high']),dueDate:x.dueDate===''?'':date(x.dueDate),today:bool(x.today),createdAt:iso(x.createdAt),completedAt:x.completedAt===null?null:iso(x.completedAt)};});
+ const tasks=read('tasks',10000,x=>{if(!projectIds.has(x.projectId))invalid('project reference');return {id:id(x.id),projectId:id(x.projectId),title:text(x.title,'title',300,true),notes:text(x.notes,'notes',20000),status:choice(x.status==='next'?'backlog':x.status,['backlog','doing','done']),priority:choice(x.priority,['low','normal','high']),dueDate:x.dueDate===''?'':date(x.dueDate),today:bool(x.today),createdAt:iso(x.createdAt),completedAt:x.completedAt===null?null:iso(x.completedAt)};});
  const result={version:1,categories,projects,tasks,updatedAt:iso(input.updatedAt)};
  if(Buffer.byteLength(JSON.stringify(result))>MAX_BYTES)invalid('size');return result;
 }
@@ -25,7 +25,7 @@ function createSampleWorkspace(){
  const w=emptyWorkspace();
  w.categories=[{id:'sample-games',name:'Games',color:'#8b5cf6'}];
  w.projects=[{id:'sample-lose-dot',categoryId:'sample-games',name:'lose.DOT (sample)',description:'Optional sample project. Not imported from any provider.',repositoryUrl:'',localPath:'',archived:false}];
- w.tasks=[{id:'sample-first-task',projectId:'sample-lose-dot',title:'Try editing this sample task',notes:'Sample only — replace this workspace with your own projects.',status:'next',priority:'normal',dueDate:'',today:false,createdAt:w.updatedAt,completedAt:null}];
+ w.tasks=[{id:'sample-first-task',projectId:'sample-lose-dot',title:'Try editing this sample task',notes:'Sample only — replace this workspace with your own projects.',status:'backlog',priority:'normal',dueDate:'',today:false,createdAt:w.updatedAt,completedAt:null}];
  return w;
 }
 module.exports={emptyWorkspace,validateWorkspace,createSampleWorkspace,MAX_BYTES};

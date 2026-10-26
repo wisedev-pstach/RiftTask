@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 const id = () => crypto.randomUUID();
-const statuses = {backlog:'Backlog',next:'Up next',doing:'In progress',done:'Done'};
+const statuses = {backlog:'Backlog',doing:'In progress',done:'Done'};
 const blank = () => ({version:1,categories:[],projects:[],tasks:[],updatedAt:new Date().toISOString()});
 function previewBridge(){
  let workspace=blank();

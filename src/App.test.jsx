@@ -3,12 +3,65 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import App from './App';
+import { readFileSync } from 'node:fs';
+const styles=readFileSync('src/styles.css','utf8');
 const account = { id: 1, login: 'developer', name: 'Developer' };
 export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[],updatedAt:new Date().toISOString()}) {
  return {session:vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true}),login:vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true}),load:vi.fn().mockResolvedValue(workspace),save:vi.fn(async w=>structuredClone(w)),logout:vi.fn().mockResolvedValue(),chooseDirectory:vi.fn().mockResolvedValue('/work/game'),openRepository:vi.fn().mockResolvedValue(),openTerminal:vi.fn().mockResolvedValue(),exportBackup:vi.fn().mockResolvedValue(true),importBackup:vi.fn().mockResolvedValue(null)};
 }
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
+ it('marks only the In progress board heading as active',async()=>{
+ const w=populated();w.tasks.push({id:'task',projectId:'project',title:'Work',notes:'',status:'doing',priority:'normal',dueDate:'',today:false,createdAt:'2026-10-01T12:00:00.000Z',completedAt:null});
+ const u=userEvent.setup();render(<App bridge={bridge(w)}/>);await screen.findByRole('heading',{name:'All tasks'});await u.click(screen.getByRole('button',{name:'Board'}));
+ const style=document.createElement('style');style.textContent=styles;document.head.append(style);
+ try{
+ // Match the real marker selectors against the rendered headings; jsdom does not paint pseudo-elements.
+ const markerSelectors=[...style.sheet.cssRules].filter(rule=>rule.selectorText?.includes('.board-column')&&rule.selectorText.endsWith('::before')).map(rule=>rule.selectorText.replace(/::before$/,''));
+ expect(markerSelectors.length).toBeGreaterThan(0);
+ expect(screen.getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
+ }finally{style.remove();}
+ });
+ it('renders exactly three ordered board regions on a three-column grid and moves tasks without losing fields',async()=>{
+ const w=populated();w.tasks=['backlog','doing','done'].map((status,index)=>({id:`task-${index}`,projectId:'project',title:`Task ${status}`,notes:'Preserved notes',status,priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:status==='done'?'2026-10-02T12:00:00.000Z':null}));
+ const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'All tasks'});
+ await u.click(screen.getByRole('button',{name:'Board'}));
+ const regions=screen.getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
+ for(const [index,status] of ['backlog','doing','done'].entries()){
+ expect(within(regions[index]).getByRole('button',{name:`Edit task Task ${status}`})).toBeInTheDocument();
+ expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','done']);
+ }
+ const style=document.createElement('style');style.textContent=styles;document.head.append(style);
+ try{const gridRule=[...style.sheet.cssRules].find(rule=>rule.selectorText==='.board');expect(gridRule.style.getPropertyValue('grid-template-columns')).toBe('repeat(3,minmax(190px,1fr))');}finally{style.remove();}
+ await u.selectOptions(within(regions[0]).getByRole('combobox'),'doing');
+ await waitFor(()=>expect(within(regions[1]).getByRole('button',{name:'Edit task Task backlog'})).toBeInTheDocument());
+ expect(within(regions[0]).queryByRole('button',{name:'Edit task Task backlog'})).not.toBeInTheDocument();
+ expect(api.save.mock.lastCall[0].tasks).toEqual([{...w.tasks[0],status:'doing'},...w.tasks.slice(1)]);
+ });
+ it('offers only the three ordered statuses in rows and task forms while preserving fields through transitions',async()=>{
+ const w=populated();const task={id:'task',projectId:'project',title:'Ship build',notes:'Keep release notes',status:'backlog',priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:null};w.tasks.push(task);
+ const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'All tasks'});
+ const expectStatuses=select=>expect(within(select).getAllByRole('option').map(option=>[option.value,option.textContent])).toEqual([['backlog','Backlog'],['doing','In progress'],['done','Done']]);
+ expectStatuses(screen.getByLabelText('Status for Ship build'));
+ await u.click(screen.getByRole('button',{name:'New task'}));
+ expectStatuses(screen.getByLabelText('Status',{exact:true}));expect(screen.getByLabelText('Status',{exact:true})).toHaveValue('backlog');
+ await u.click(screen.getByRole('button',{name:'Cancel'}));
+ await u.click(screen.getByRole('button',{name:'Edit task Ship build'}));expectStatuses(screen.getByLabelText('Status',{exact:true}));
+ await u.selectOptions(screen.getByLabelText('Status',{exact:true}),'doing');await u.click(screen.getByRole('button',{name:'Save task'}));
+ await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+ expect(api.save.mock.lastCall[0].tasks).toEqual([{...task,status:'doing'}]);
+ await u.selectOptions(screen.getByLabelText('Status for Ship build'),'done');
+ await waitFor(()=>expect(screen.getByLabelText('Status for Ship build')).toHaveValue('done'));
+ const completedAt=api.save.mock.lastCall[0].tasks[0].completedAt;
+ expect(completedAt).toEqual(expect.any(String));expect(new Date(completedAt).toISOString()).toBe(completedAt);
+ expect(api.save.mock.lastCall[0].tasks).toEqual([{...task,status:'done',completedAt}]);
+ await u.click(screen.getByRole('button',{name:'Edit task Ship build'}));
+ await u.click(screen.getByRole('button',{name:'Save task'}));await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+ expect(api.save.mock.lastCall[0].tasks).toEqual([{...task,status:'done',completedAt}]);
+ await u.selectOptions(screen.getByLabelText('Status for Ship build'),'backlog');
+ await waitFor(()=>expect(screen.getByLabelText('Status for Ship build')).toHaveValue('backlog'));
+ expect(api.save.mock.lastCall[0].tasks).toEqual([task]);
+ });
  it('checks project-local Git status only on request and keeps results in their project context',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'other',name:'Other project',localPath:''});
  const api=bridge(w);api.gitStatus=vi.fn().mockResolvedValue({branch:'feature/local',changed:3});
