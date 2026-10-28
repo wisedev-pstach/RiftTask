@@ -378,6 +378,7 @@ describe('workspace',()=>{
  expect(await screen.findByRole('button',{name:'Edit category Development'})).toBeInTheDocument();
  expect(api.save.mock.lastCall[0].projects[0].categoryId).toBe(api.save.mock.lastCall[0].categories[0].id);
  });
+ it('opens wired cloud settings without syncing or preventing local-only work',async()=>{const api=bridge();api.cloudStatus=vi.fn().mockResolvedValue({state:'off'});const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Cloud persistence'}));expect(await screen.findByRole('heading',{name:'Manual cloud persistence'})).toBeInTheDocument();expect(api.cloudStatus).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'New category'})).toBeEnabled();});
  it('requires sign-in before loading and opens the empty local workspace after verification',async()=>{
  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});
  render(<App bridge={api}/>);

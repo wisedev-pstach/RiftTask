@@ -26,7 +26,7 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
   const userData = app.getPath('userData');
   const auth = dependencies.createAuth({cachePath:path.join(userData,'identity.json')});
   const store = dependencies.createStore(userData);
-  const service = dependencies.createService({auth,store,chooseExportPath:async()=>{
+  const service = dependencies.createService({auth,store,cloudRoot:userData,chooseExportPath:async()=>{
     const result=await dialog.showSaveDialog(window,{title:'Export workspace backup',defaultPath:'RiftTask-backup.json',filters:[{name:'JSON workspace',extensions:['json']}],properties:['showOverwriteConfirmation']});
     return result.canceled ? null : result.filePath ?? null;
   },chooseImportPath:async()=>{

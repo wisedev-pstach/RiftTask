@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import CloudPanel from './CloudPanel.jsx';
 const id = () => crypto.randomUUID();
 const statuses = {backlog:'Backlog',doing:'In progress',done:'Done'};
 const blank = () => ({version:1,categories:[],projects:[],tasks:[],updatedAt:new Date().toISOString()});
@@ -32,7 +33,7 @@ export default function App({bridge: providedBridge = window.rift}) {
  const [session,setSession]=useState(null), [workspace,setWorkspace]=useState(null), [error,setError]=useState('');
  const [view,setView]=useState('all'), [editor,setEditor]=useState(null), [saving,setSaving]=useState(false);
  const [search,setSearch]=useState(''), [layout,setLayout]=useState('list'), [confirmDelete,setConfirmDelete]=useState(false);
- const [feature,setFeature]=useState('tasks');
+ const [feature,setFeature]=useState('tasks'),[cloudOpen,setCloudOpen]=useState(false);
  function navigate(next){setView(next);setSearch('');setFeature('tasks');}
  const lock=useRef(false), trigger=useRef(null), context=useRef(0);
  const [notice,setNotice]=useState(''), [restorePrompt,setRestorePrompt]=useState(false), [connecting,setConnecting]=useState(false);
@@ -60,7 +61,7 @@ export default function App({bridge: providedBridge = window.rift}) {
   try {
    const result=await bridge[method](...(arg===undefined?[]:[arg]));
    if(method==='gitStatus'&&requestContext===context.current)setNotice(result?`Git branch: ${result.branch} — ${result.changed} changed entries.`:'Git status unavailable: this project directory is not a Git repository.');
-   if(method==='logout'){setWorkspace(null);setSession({account:null,offline:false,ghAvailable:session.ghAvailable});navigate('all');setEditor(null);}
+   if(method==='logout'){setCloudOpen(false);setWorkspace(null);setSession({account:null,offline:false,ghAvailable:session.ghAvailable});navigate('all');setEditor(null);}
    if(method==='exportBackup'&&result)setNotice('Backup exported.');
    if(method==='importBackup'&&result){setWorkspace(result);navigate('all');setNotice('Backup restored.');}
    if(method==='chooseDirectory'&&result){const input=document.querySelector('[name="localPath"]');if(input)input.value=result;}
@@ -118,6 +119,8 @@ export default function App({bridge: providedBridge = window.rift}) {
    {bridge.preview&&<p className="preview-banner" role="status">Browser preview — session only. Changes disappear on reload; GitHub sign-in and native actions are unavailable.</p>}
    <header><div><div className="eyebrow">OPERATE / WORKSPACE</div><h1>{project?.name||category?.name||(view==='today'?'Today':'Projects')}</h1><p>{project?.description||(project?'Tasks and project context.':view==='today'?'A deliberate focus for your day.':'Choose a project to focus on its tasks.')}</p></div><div className="header-actions"><button className="primary" disabled={!activeProjects.length||saving} onClick={()=>edit('task')}>New task</button></div></header>
    {project&&<div role="tablist" aria-label="Project features" className="feature-tabs">{[['tasks','Tasks'],['details','Project details']].map(([key,label])=><button key={key} role="tab" id={`tab-${key}`} aria-controls={`panel-${key}`} aria-selected={feature===key} tabIndex={feature===key?0:-1} onClick={()=>setFeature(key)} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?'tasks':e.key==='End'?'details':key==='tasks'?'details':'tasks';setFeature(next);document.getElementById(`tab-${next}`)?.focus();}}}>{label}</button>)}</div>}
+   <button disabled={saving||!workspace||bridge.preview||!bridge.cloudStatus} onClick={()=>setCloudOpen(v=>!v)} aria-expanded={cloudOpen}>Cloud persistence</button>
+   {cloudOpen&&<CloudPanel disabled={saving} key={session.account.id} bridge={bridge} account={session.account} onBusy={busy=>{lock.current=busy;setSaving(busy);}} onWorkspace={next=>{setWorkspace(next);navigate('all');}}/>}
    {notice&&<p role="status" className="notice">{notice}</p>}
    {error&&!editor&&<p role="alert">{error}</p>}
    {!workspace?(error?<button onClick={()=>connect()}>Retry loading</button>:<p role="status">Loading workspace…</p>):overview?<section aria-label="Project overview" className="project-grid">{visibleProjects.map(p=><button className="project-tile" key={p.id} onClick={()=>navigate(`project:${p.id}`)}><strong>{p.name}</strong>{' '}<span>In progress {workspace.tasks.filter(t=>t.projectId===p.id&&t.status==='doing').length}</span>{' '}<span>To do {workspace.tasks.filter(t=>t.projectId===p.id&&t.status==='backlog').length}</span></button>)}{!visibleProjects.length&&<div className="empty"><h2>No projects yet</h2><p>Create a category and project to give your work a home.</p></div>}</section>:project&&feature==='details'?<section role="tabpanel" id="panel-details" aria-labelledby="tab-details" className="project-details"><h2>Project details</h2><p>{project.description||'No description yet.'}</p><dl><dt>Repository</dt><dd>{project.repositoryUrl||'Not configured'}</dd><dt>Local directory</dt><dd>{project.localPath||'Not configured'}</dd></dl><div className="detail-actions"><button disabled={saving} onClick={()=>edit('project',project)}>Edit project</button><button disabled={saving||bridge.preview||!project.repositoryUrl} onClick={()=>nativeAction('openRepository',project.repositoryUrl)}>Open repository</button><button disabled={saving||bridge.preview||!project.localPath} onClick={()=>nativeAction('openTerminal',project.id)}>Open external terminal (interim)</button><button disabled={saving||bridge.preview||!project.localPath} onClick={()=>nativeAction('gitStatus',project.id)}>Check Git status</button></div><p>External terminal launcher is interim. Embedded terminal is not implemented.</p></section>:<section role={project?'tabpanel':undefined} id={project?'panel-tasks':undefined} aria-labelledby={project?'tab-tasks':undefined}>

@@ -1,3 +1,9 @@
+.cloud-panel {margin:18px 0;padding:20px 24px;border:1px solid var(--line);border-radius:12px;background:var(--surface);max-width:920px;}
+.cloud-panel p {line-height:1.55;color:var(--muted);}
+.cloud-panel h2 {margin-top:0;}
+.cloud-panel button {margin:8px 10px 8px 0;}
+.cloud-panel .field {max-width:460px;}
+.cloud-panel .check {line-height:1.5;}
 :root {
  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
  color: #e5e3df; background: #1b1c1e; color-scheme: dark;

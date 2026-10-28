@@ -23,10 +23,13 @@ function readBackup(source){
   try{return validateWorkspace(JSON.parse(text));}
   catch{throw new Error('Invalid backup. A valid version-1 RiftTask workspace is required; no data was replaced.');}
 }
-function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath}) {
-  let boundAccount=null;
+function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,cloudRoot,cloudTransport}) {
+  let boundAccount=null,generation=0;
+  const cloud=cloudRoot?require('./cloud-runtime.cjs').createCloud({root:cloudRoot,store,transport:cloudTransport||require('./cloud-transport.cjs').createCloudTransport(),identity:async()=>{const id=await accountId();const state=await auth.session();if(state.account?.id!==id)throw new Error('GitHub account changed.');return {...state,generation};}}):null;
+  const cloudCall=method=>async(...args)=>{if(!cloud)throw new Error('Cloud is unavailable.');return cloud[method](...args);};
   async function refresh(method) {
     const state=await auth[method]();
+    if(boundAccount!==(state.account?.id??null))generation++;
     boundAccount=state.account?.id??null;
     return state;
   }
@@ -40,9 +43,11 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
     return account.id;
   }
   return {
+    cloudStatus:async()=>cloud?cloud.status():{state:'off'},
+    cloudVerify:cloudCall('verify'),cloudEnable:cloudCall('enable'),cloudDisable:cloudCall('disable'),cloudSync:cloudCall('sync'),
     session:()=>refresh('session'),
     login:()=>refresh('login'),
-    logout:async()=>{const state=await auth.logout();boundAccount=null;return state;},
+    logout:async()=>{generation++;const state=await auth.logout();boundAccount=null;return state;},
     exportBackup:async()=>{
       const id=await accountId();
       const destination=await chooseExportPath();

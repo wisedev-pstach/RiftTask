@@ -46,10 +46,10 @@ test('sandbox-compatible preload exposes frozen narrow promise bridge without ra
     assert.equal(name,'electron');
     return {contextBridge:{exposeInMainWorld:(name,bridge)=>{assert.equal(name,'rift');exposed=bridge;}},ipcRenderer:{invoke:async (...args)=>{calls.push(args); return 'result';}}};
   }});
-  const methods=['session','login','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup'];
+  const methods=['session','login','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudVerify','cloudEnable','cloudDisable','cloudSync'];
   assert.deepEqual(Object.keys(exposed).sort(),methods.sort()); assert.ok(Object.isFrozen(exposed));
   for(const name of methods) {
-    const args=['save','openRepository','openTerminal','gitStatus'].includes(name)?['value']:[];
+    const args=['save','openRepository','openTerminal','gitStatus','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];
     assert.equal(await exposed[name](...args),'result'); assert.deepEqual(calls.at(-1),['rift:'+name,...args]);
   }
   await exposed.session('ignored'); assert.deepEqual(calls.at(-1),['rift:session']);
