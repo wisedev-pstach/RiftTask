@@ -51,9 +51,9 @@ describe('workspace',()=>{
  const details=screen.getByRole('tabpanel',{name:'Project details'});
  expect(within(details).getByRole('button',{name:'Edit project'})).toBeInTheDocument();
  expect(within(details).getByRole('button',{name:'Open repository'})).toBeInTheDocument();
- expect(within(details).getByRole('button',{name:'Open external terminal (interim)'})).toBeInTheDocument();
+ expect(within(details).queryByRole('button',{name:'Open external terminal (interim)'})).not.toBeInTheDocument();
  expect(within(details).getByRole('button',{name:'Check Git status'})).toBeInTheDocument();
- expect(screen.getByText(/Embedded terminal is not implemented/)).toBeInTheDocument();
+ expect(screen.getByRole('region',{name:'Project terminal'})).toBeInTheDocument();
  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
  await u.click(screen.getByRole('tab',{name:'Tasks'}));
  expect(screen.getByRole('tabpanel',{name:'Tasks'})).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe('workspace',()=>{
  // Match the real marker selectors against the rendered headings; jsdom does not paint pseudo-elements.
  const markerSelectors=[...style.sheet.cssRules].filter(rule=>rule.selectorText?.includes('.board-column')&&rule.selectorText.endsWith('::before')).map(rule=>rule.selectorText.replace(/::before$/,''));
  expect(markerSelectors.length).toBeGreaterThan(0);
- expect(screen.getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
+ expect(within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
  }finally{style.remove();}
  });
  it('renders exactly three ordered board regions on a three-column grid and moves tasks without losing fields',async()=>{
@@ -151,7 +151,7 @@ describe('workspace',()=>{
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.click(screen.getByRole('button',{name:'Board'}));
- const regions=screen.getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
+ const regions=within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
  for(const [index,status] of ['backlog','doing','done'].entries()){
  expect(within(regions[index]).getByRole('button',{name:`Edit task Task ${status}`})).toBeInTheDocument();
  expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','done']);
@@ -286,7 +286,7 @@ describe('workspace',()=>{
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT'}));await u.click(screen.getByRole('tab',{name:'Project details'}));
  await u.click(screen.getByRole('button',{name:'Open repository'}));expect(api.openRepository).toHaveBeenCalledWith('https://github.com/test/game');
- await u.click(screen.getByRole('button',{name:'Open external terminal (interim)'}));expect(api.openTerminal).toHaveBeenCalledWith('project');
+ expect(api.openTerminal).not.toHaveBeenCalled(); // External launcher is no longer the project terminal UI.
  await u.click(screen.getByRole('button',{name:'Edit project'}));await u.click(screen.getByRole('button',{name:'Choose directory'}));
  await waitFor(()=>expect(screen.getByLabelText('Local directory')).toHaveValue('/work/game'));await u.click(screen.getByRole('button',{name:'Cancel'}));
  await u.click(screen.getByRole('button',{name:'Export backup'}));await screen.findByText('Backup exported.');expect(api.exportBackup).toHaveBeenCalledOnce();

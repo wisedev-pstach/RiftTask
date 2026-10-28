@@ -33,6 +33,7 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
     const result=await dialog.showOpenDialog(window,{title:'Import workspace backup',filters:[{name:'JSON workspace',extensions:['json']}],properties:['openFile']});
     return result.canceled ? null : result.filePaths[0] ?? null;
   }});
+  app.on('will-quit',()=>service.dispose?.());
   function fail() {
     dialog.showErrorBox('RiftTask could not start','The local application could not be loaded. Build the app with npm run build, then restart.');
     app.quit();
@@ -59,7 +60,8 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
       return result.canceled ? null : result.filePaths[0] ?? null;
     }});
     current.once('ready-to-show',()=>current.show());
-    current.on('closed',()=>{dispose();dispose=()=>{};window=null;});
+    contents.on('render-process-gone',()=>service.closeTerminals?.());
+    current.on('closed',()=>{service.closeTerminals?.();dispose();dispose=()=>{};window=null;});
     // Never load a dev URL or a renderer URL supplied through the environment.
     current.loadFile(indexFile).catch(fail);
   }

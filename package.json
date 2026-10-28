@@ -13,11 +13,18 @@
     "test:ui": "vitest run",
     "test": "npm run test:core && npm run test:ui",
     "start": "electron .",
+    "native:rebuild": "electron-builder install-app-deps",
     "pack": "npm run build && electron-builder --dir",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never"
   },
-  "dependencies": {"react": "19.3.1", "react-dom": "19.3.1"},
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "node-pty": "1.1.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
   "devDependencies": {
     "@vitejs/plugin-react": "6.1.2",
     "vite": "8.3.5",
@@ -35,8 +42,12 @@
     "directories": {"output": "release"},
     "files": ["dist/**/*", "desktop/**/*", "package.json"],
     "asar": true,
+    "npmRebuild": true,
+    "afterPack": "desktop/pty-packaging.cjs",
+    "asarUnpack": ["node_modules/node-pty/**/*"],
     "mac": {"target": [{"target": "zip", "arch": ["arm64", "x64"]}], "category": "public.app-category.productivity"},
     "win": {"target": [{"target": "nsis", "arch": ["x64", "arm64"]}]},
     "nsis": {"oneClick": true, "perMachine": false}
-  }
+  },
+  "allowScripts": {"node-pty@1.1.0": true}
 }

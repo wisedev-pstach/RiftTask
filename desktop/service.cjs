@@ -1,4 +1,5 @@
 'use strict';
+const {setInterval,clearInterval}=require('node:timers');
 const {readGitStatus} = require('./git.cjs');
 const {openTerminalDirectory} = require('./terminal.cjs');
 const fs=require('node:fs');
@@ -23,31 +24,51 @@ function readBackup(source){
   try{return validateWorkspace(JSON.parse(text));}
   catch{throw new Error('Invalid backup. A valid version-1 RiftTask workspace is required; no data was replaced.');}
 }
-function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,cloudRoot,cloudTransport}) {
-  let boundAccount=null,generation=0;
+function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,cloudRoot,cloudTransport,ptySpawn}) {
+  let boundAccount=null,generation=0,terminalAccount=null,terminalBlocked=false,disconnecting=false;
+  const pty=require('./pty.cjs').createPty({spawn:ptySpawn,resolve:async projectId=>{
+    if(typeof projectId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId))throw new Error('Invalid project ID.');
+    const version=generation;
+    if(terminalBlocked||disconnecting)throw new Error('Terminal is disconnected. Check sign-in first.');
+    const id=terminalAccount??await accountId();
+    const workspace=await store.load(id);
+    if(version!==generation||boundAccount!==id||terminalBlocked||disconnecting)throw new Error('Account changed.');
+    const project=workspace.projects.find(p=>p.id===projectId&&!p.archived);
+    if(!project||!project.localPath)throw new Error('Choose a local project directory.');
+    terminalAccount=id;return {account:id,path:project.localPath};
+  }});
+  let auditing=false;
+  const auditTimer=setInterval(async()=>{if(auditing||terminalAccount===null)return;auditing=true;try{await accountId();await pty.audit();}catch{pty.reset();terminalAccount=null;}finally{auditing=false;}},5000);auditTimer.unref?.();
   const cloud=cloudRoot?require('./cloud-runtime.cjs').createCloud({root:cloudRoot,store,transport:cloudTransport||require('./cloud-transport.cjs').createCloudTransport(),identity:async()=>{const id=await accountId();const state=await auth.session();if(state.account?.id!==id)throw new Error('GitHub account changed.');return {...state,generation};}}):null;
   const cloudCall=method=>async(...args)=>{if(!cloud)throw new Error('Cloud is unavailable.');return cloud[method](...args);};
   async function refresh(method) {
+    const version=generation;if(disconnecting)throw new Error('Account disconnect is in progress.');
     const state=await auth[method]();
-    if(boundAccount!==(state.account?.id??null))generation++;
+    if(version!==generation||disconnecting)throw new Error('Account changed during sign-in check. Retry.');
+    if(boundAccount!==(state.account?.id??null)){generation++;pty.reset();terminalAccount=null;}
     boundAccount=state.account?.id??null;
+    terminalBlocked=!state.account;
     return state;
   }
   async function accountId() {
     const {account}=await auth.session();
-    if (!account) throw new Error('Sign in to GitHub to open your workspace.');
+    if (!account) {pty.reset();terminalAccount=null;throw new Error('Sign in to GitHub to open your workspace.');}
     if (boundAccount!==null && boundAccount!==account.id) {
+      pty.reset();terminalAccount=null;
       throw new Error('GitHub account changed. Disconnect and check sign-in before opening or saving another workspace.');
     }
     boundAccount=account.id;
     return account.id;
   }
   return {
+    ptyStart:project=>pty.start(project),ptyRead:(project,id)=>pty.read(project,id),ptyInput:(project,id,data)=>pty.input(project,id,data),ptyResize:(project,id,cols,rows)=>pty.resize(project,id,cols,rows),ptyClose:(project,id)=>pty.close(project,id),
+    closeTerminals:()=>{pty.reset();terminalAccount=null;},
+    dispose:()=>{clearInterval(auditTimer);pty.dispose();},
     cloudStatus:async()=>cloud?cloud.status():{state:'off'},
     cloudVerify:cloudCall('verify'),cloudEnable:cloudCall('enable'),cloudDisable:cloudCall('disable'),cloudSync:cloudCall('sync'),
     session:()=>refresh('session'),
     login:()=>refresh('login'),
-    logout:async()=>{generation++;const state=await auth.logout();boundAccount=null;return state;},
+    logout:async()=>{generation++;pty.reset();terminalAccount=null;terminalBlocked=true;disconnecting=true;try{const state=await auth.logout();boundAccount=null;return state;}finally{disconnecting=false;}},
     exportBackup:async()=>{
       const id=await accountId();
       const destination=await chooseExportPath();
@@ -80,10 +101,10 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
       if(await accountId()!==id)throw new Error('GitHub account changed. Retry backup import.');
       const workspace=readBackup(source);
       if(await accountId()!==id)throw new Error('GitHub account changed. Retry backup import.');
-      return store.save(id,workspace);
+      const saved=await store.save(id,workspace);await pty.audit();return saved;
     },
     load:async()=>store.load(await accountId()),
-    save:async(workspace)=>store.save(await accountId(),workspace),
+    save:async(workspace)=>{const saved=await store.save(await accountId(),workspace);await pty.audit();return saved;},
     openTerminal:async(projectId)=>{
       if (typeof projectId!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId)) throw new Error('Invalid project ID.');
       const workspace=await store.load(await accountId());
