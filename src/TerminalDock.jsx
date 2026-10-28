@@ -3,7 +3,7 @@ import {Terminal} from '@xterm/xterm';
 import {FitAddon} from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
-function Surface({bridge,projectId,session,onState,onError}){
+function Surface({bridge,projectId,session,onState,onError,onUnavailable}){
  const host=useRef(null);
  useEffect(()=>{
   let alive=true,busy=false,revision=-1,pending=0,previous='';
@@ -12,6 +12,7 @@ function Surface({bridge,projectId,session,onState,onError}){
   const fail=e=>{if(alive)onError(e.message||'Native terminal unavailable.');};
   const size=()=>{if(!alive)return;try{fit.fit();const cols=Math.max(2,Math.min(300,terminal.cols)),rows=Math.max(2,Math.min(100,terminal.rows));bridge.ptyResize(projectId,session.id,cols,rows).catch(fail);}catch{}};
   const input=terminal.onData(data=>{
+   if(!alive)return;
    if(pending>=16){fail(new Error('Input queue full. Paste smaller text.'));return;}
    // Refuse large pastes rather than allocating an unbounded IPC queue.
    if(new TextEncoder().encode(data).length>4096){fail(new Error('Paste limit is 4096 bytes.'));return;}
@@ -19,7 +20,7 @@ function Surface({bridge,projectId,session,onState,onError}){
   });
   const paint=state=>{if(!alive)return;if(state.revision!==revision){if(revision>=0&&state.output.startsWith(previous))terminal.write(state.output.slice(previous.length));else{terminal.reset();terminal.write(state.output);}previous=state.output;revision=state.revision;}onState(state);};
   paint(session);
-  const poll=async()=>{if(busy||!alive)return;busy=true;try{paint(await bridge.ptyRead(projectId,session.id));}catch(e){fail(e);}finally{busy=false;}};
+  const poll=async()=>{if(busy||!alive)return;busy=true;try{paint(await bridge.ptyRead(projectId,session.id));}catch(e){if(alive){fail(e);alive=false;onUnavailable();}}finally{busy=false;}};
   const timer=setInterval(poll,500);const observer=typeof ResizeObserver!=='undefined'?new ResizeObserver(size):null;observer?.observe(host.current);size();terminal.focus();
   return ()=>{alive=false;clearInterval(timer);observer?.disconnect();input.dispose();terminal.dispose();};
  },[bridge,projectId,session.id]);
@@ -38,7 +39,7 @@ export default function TerminalDock({bridge,project,projects,disabled}){
  async function close(){const key=active.current,p=project;setBusy(true);try{await bridge.ptyClose(p.id,session.id);if(active.current===key)setSessions(old=>{const next={...old};delete next[p.id];return next;});}catch(e){if(active.current===key){setError(e.message);setSessions(old=>{const next={...old};delete next[p.id];return next;});}}finally{if(active.current===key)setBusy(false);}}
  return <section hidden={!project} aria-label="Project terminal" className="terminal-dock">
   <div className="terminal-heading"><strong>TERMINAL <small>{project?.name} · local shell</small></strong>{session?<button disabled={busy||disabled} onClick={close}>Close shell</button>:<button disabled={!native||!project?.localPath||busy||disabled} onClick={start}>{busy?'Starting…':'Start native shell'}</button>}</div>
-  {!native?<p>Native terminal unavailable in browser preview. No shell is running here.</p>:!session?<p>Explicit start only. The shell has full access to your files and network as your OS user. App credentials are not inherited; credentials on disk remain accessible. No project scripts are started automatically. Choose a saved local directory first.</p>:<><p className="terminal-status">{session.running?'Running · retained when switching projects and tabs':'Shell exited · close to start again'} · up to 4 sessions · bounded recent output</p><Surface key={`${project.id}:${session.id}`} bridge={bridge} projectId={project.id} session={session} onState={state=>setSessions(old=>old[project.id]?.id===state.id?{...old,[project.id]:{...state,path:project.localPath}}:old)} onError={setError}/></>}
+  {!native?<p>Native terminal unavailable in browser preview. No shell is running here.</p>:!session?<p>Explicit start only. The shell has full access to your files and network as your OS user. App credentials are not inherited; credentials on disk remain accessible. No project scripts are started automatically. Choose a saved local directory first.</p>:<><p className="terminal-status">{session.unavailable?'Shell connection unavailable · close to retry':session.running?'Running · retained when switching projects and tabs':'Shell exited · close to start again'} · up to 4 sessions · bounded recent output</p>{!session.unavailable&&<Surface key={`${project.id}:${session.id}`} bridge={bridge} projectId={project.id} session={session} onState={state=>setSessions(old=>old[project.id]?.id===state.id?{...old,[project.id]:{...state,path:project.localPath}}:old)} onError={setError} onUnavailable={()=>setSessions(old=>old[project.id]?.id===session.id?{...old,[project.id]:{...old[project.id],unavailable:true}}:old)}/>}</>}
   {error&&<p role="alert">{error}</p>}
  </section>;
 }

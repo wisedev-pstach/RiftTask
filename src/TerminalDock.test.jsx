@@ -13,6 +13,13 @@ it('streams incremental output without resetting an active shell and routes keyb
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Example a',exact:true}));await u.click(screen.getByRole('button',{name:'Start native shell'}));const terminal=terminals.at(-1);
  await waitFor(()=>expect(terminal.writes).toEqual(['prompt','next']),{timeout:1500});expect(terminal.resets).toBe(1);terminal.input('hi\r');expect(api.ptyInput).toHaveBeenCalledWith('a','live','hi\r');expect(api.ptyResize).toHaveBeenCalledWith('a','live',80,24);
 });
+it('stops claiming a running shell after a read failure and allows explicit recovery',async()=>{
+ const api=bridge(workspace());api.ptyStart=vi.fn(async()=>({id:'lost',output:'prompt',revision:1,running:true}));api.ptyRead=vi.fn(async()=>{throw new Error('Terminal session is no longer available.');});api.ptyResize=vi.fn(async()=>{});api.ptyInput=vi.fn(async()=>{});api.ptyClose=vi.fn(async()=>{throw new Error('Terminal session is no longer available.');});
+ const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Example a',exact:true}));await u.click(screen.getByRole('button',{name:'Start native shell'}));const terminal=terminals.at(-1);
+ await screen.findByText(/Shell connection unavailable · close to retry/);expect(screen.queryByText(/Running · retained/)).not.toBeInTheDocument();expect(screen.getByRole('alert')).toHaveTextContent('Terminal session is no longer available.');
+ const reads=api.ptyRead.mock.calls.length;await new Promise(r=>setTimeout(r,600));expect(api.ptyRead).toHaveBeenCalledTimes(reads);terminal.input('must not send\r');expect(api.ptyInput).not.toHaveBeenCalled();
+ await u.click(screen.getByRole('button',{name:'Close shell'}));expect(await screen.findByRole('button',{name:'Start native shell'})).toBeEnabled();expect(api.ptyStart).toHaveBeenCalledTimes(1);
+});
 it('browser preview never offers execution and renders a bottom dock, not a fake shell',async()=>{
  const u=userEvent.setup();const api=bridge(workspace());api.preview=true;render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Example a',exact:true}));
  expect(screen.getByText('Native terminal unavailable in browser preview. No shell is running here.')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Start native shell'})).toBeDisabled();
