@@ -1,4 +1,8 @@
-# Account cloud persistence — snapshot helpers only, NOT sync
+# Account cloud persistence — manual runtime implemented, live acceptance pending
+
+## Current status — 28 October 2026
+The consent-safe manual runtime/UI/IPC/gh transport is now wired and independently reviewed; see `cloud-runtime-evidence.md` and the latest `BUILD-STATE.md`. No actual remote snapshot transfer or cross-device acceptance has been authorized/performed on this host. Milestone labels and task assignment are preserved by the canonical validator/projection/restore; consent now lists those fields. Native/platform verification and conflict-resolution UX remain pending. The sections below record the original design and historical helper-only baseline, not current implementation status.
+
 
 Pure canonical projection and restore preparation are now implemented in `desktop/cloud-snapshot.cjs` with no runtime caller, network or storage side effect. See `cloud-snapshot-evidence.md`. They strip outbound local paths, retain this device's mappings by project ID on proposed restore, bind numeric scope IDs, reject unsupported fields/formats, and bound UTF-8 JSON to **512 KiB including envelope**. They do not verify consent, active identity, repository ownership/privacy or transfer permission. Those gates, transport and opt-in UI remain unimplemented. No cloud workspace has been transferred.
 

@@ -46,7 +46,7 @@ describe('workspace',()=>{
  expect(screen.getByRole('tab',{name:'Tasks'})).toHaveAttribute('aria-selected','true');
  expect(screen.queryByRole('button',{name:'Edit project'})).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Open repository'})).not.toBeInTheDocument();
- expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Tasks','Project details']);
+ expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Tasks','Milestones','Project details']);
  await u.click(screen.getByRole('tab',{name:'Project details'}));
  const details=screen.getByRole('tabpanel',{name:'Project details'});
  expect(within(details).getByRole('button',{name:'Edit project'})).toBeInTheDocument();
@@ -120,10 +120,10 @@ describe('workspace',()=>{
  await waitFor(()=>expect(api.save).toHaveBeenCalledOnce());await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
  expect(screen.getByRole('button',{name:'Archived game In progress 1 To do 0'})).toBeInTheDocument();expect(api.save.mock.lastCall[0].tasks).toEqual(w.tasks);
  });
- it('supports keyboard navigation between the two real project feature tabs',async()=>{
+ it('supports keyboard navigation between all project feature tabs',async()=>{
  const u=userEvent.setup();render(<App bridge={bridge(populated())}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  const tasks=screen.getByRole('tab',{name:'Tasks'}),details=screen.getByRole('tab',{name:'Project details'});
- tasks.focus();await u.keyboard('{ArrowRight}');expect(details).toHaveFocus();expect(details).toHaveAttribute('aria-selected','true');expect(tasks).toHaveAttribute('tabindex','-1');
+ tasks.focus();await u.keyboard('{ArrowRight}');expect(screen.getByRole('tab',{name:'Milestones'})).toHaveFocus();await u.keyboard('{ArrowRight}');expect(details).toHaveFocus();expect(details).toHaveAttribute('aria-selected','true');expect(tasks).toHaveAttribute('tabindex','-1');
  await u.keyboard('{Home}');expect(tasks).toHaveFocus();expect(tasks).toHaveAttribute('aria-selected','true');
  await u.keyboard('{End}');expect(details).toHaveFocus();await u.keyboard('{ArrowRight}');expect(tasks).toHaveFocus();
  });

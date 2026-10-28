@@ -21,6 +21,7 @@ it('requires verified repository and plaintext/history consent before enabling; 
  const bridge={cloudStatus:vi.fn().mockResolvedValue({state:'off'}),cloudVerify:vi.fn().mockResolvedValue(repo),cloudEnable:vi.fn().mockResolvedValue({state:'ready',repository:repo}),cloudSync:vi.fn().mockResolvedValue({state:'conflict',repository:repo}),cloudDisable:vi.fn().mockResolvedValue({state:'off'})};
  const u=userEvent.setup();render(<CloudPanel bridge={bridge} account={{id:17,login:'solo'}} onWorkspace={()=>{}} onBusy={()=>{}}/>);
  await screen.findByText(/Cloud off/);expect(bridge.cloudSync).not.toHaveBeenCalled();
+ expect(screen.getByText(/milestone labels and task assignments/)).toBeInTheDocument();
  expect(screen.getByText(/plaintext/)).toBeInTheDocument();expect(screen.getByText(/history retains/)).toBeInTheDocument();expect(screen.getByText(/Local directory paths are never uploaded/)).toBeInTheDocument();
  await u.type(screen.getByLabelText('Dedicated private repository'),'solo/task-data');await u.click(screen.getByRole('button',{name:'Verify repository'}));
  expect(await screen.findByText(/solo\/task-data.*77/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Enable manual cloud'})).toBeDisabled();
