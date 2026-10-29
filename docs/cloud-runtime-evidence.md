@@ -1,5 +1,7 @@
 # Manual cloud runtime evidence — 28 October 2026
 
+> Update, 29 October: the newly authorized DUMMY-only real GitHub smoke passed against the dedicated private test repo, including two independent local stores and process restart. See `cloud-live-evidence.md` for actual remote write/readback SHAs and limitations. This document records the earlier fixture-only pass; its pending-authorization/live-verification statements are historical, not the latest status. Native/two-physical-device acceptance remains pending.
+
 ## Delivered slice and boundaries
 
 Wired `cloud-snapshot.cjs` through Electron main → service → trusted IPC/preload → React manual consent/status controls. No background sync, repository creation, issue import, auth scope changes, cloud-data repository access, or real cloud snapshot transfer was performed. **External two-device/GitHub Contents verification remains pending explicit authorization.** Mock success is not evidence of real cloud persistence.
