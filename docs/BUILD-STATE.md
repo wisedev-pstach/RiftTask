@@ -1,5 +1,12 @@
 # RiftTask — build state
 
+## 2 November — one-command authenticated installers for macOS and Windows
+- Added `scripts/install.sh` (macOS/Linux) and `scripts/install.ps1` (Windows PowerShell) for authenticated one-command installation from this private repository via official GitHub CLI (`gh`).
+- Automatically inspects environment and prerequisites (official `gh`, `gh auth status`, Git, Node.js v20+, Xcode tools on macOS), checks architecture (`arm64` vs `x64`), compiles native dependencies (`node-pty`), packages application via `electron-builder`, and installs cleanly to standard application directories (`/Applications/RiftTask.app` or `%LOCALAPPDATA%\Programs\RiftTask`) with Start Menu/Desktop shortcuts.
+- Added support for `--check` / `-Check` dry-run inspection to verify prerequisites without modifying system state.
+- Verified test suite: `tests/install-scripts.test.cjs` (6 tests covering bash syntax, usage/help, prerequisite checks, actionable missing-tool errors, and PowerShell parameter structures). Full suite passes: **119 core/integration + 39 UI tests (158 total)**, production build passes.
+- Updated `README.md` with copy-ready single-command setup instructions for Mac and Windows.
+
 ## 29 October — authorized synthetic real-cloud verification (latest)
 - Highest-priority bounded one-off complete: created exactly private personal/nonfork `wisedev-pstach/RiftTask-Cloud-Test`, ID **1438071650**, owner ID **111281468**, initialized README. Production cloud runtime/transport/store passed real Contents upload/readback, independent local stores/consent, explicit pull/update, milestones/tasks, device-path redaction, both-side conflict/no overwrite, offline/disable/local preservation and fresh Node-process restart. **Real remote storage across two local store instances, NOT two physical devices or native Electron.** Full evidence, every write's blob/commit SHA and native test handoff: `docs/cloud-live-evidence.md`.
 - Exactly three DUMMY snapshot writes; final `rifttask-workspace.json` blob `ecdd5ddbf7ba366bfbd0bd4107406ade35f7d010`, commit `432a3decdf299db9dfeb217d8b1b9a41ffc1d89f`. No real task roots/repos/data accessed, no source/project destination, auth expansion, spending, source commit/push, merge, release or scheduling. Synthetic repository/history retained; owned temporary account roots removed; no background service started.

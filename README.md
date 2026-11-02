@@ -40,11 +40,37 @@ npm start
 
 `npm run dev` serves the renderer for UI work only; it is **not** a desktop sign-in or persistence substitute. The real desktop app loads the built local files.
 
-## Planned installation
+## Installation
 
-The one-command Windows/macOS installers will download verified release assets using authenticated `gh` access to this private repository. They are **not available yet**. There are deliberately no `curl | sh` commands pointing to inaccessible private raw URLs.
+RiftTask can be installed in a single command using your authenticated GitHub CLI (`gh`).
 
-Unsigned test builds may trigger OS security warnings. Apple signing/notarization and Windows signing need the repository owner's signing credentials; this project will not pretend to possess them or disable OS security as an installation step.
+### macOS (Terminal)
+Prerequisites: official GitHub CLI (`gh auth status`), Git, and Node.js v20+ (`brew install gh node git`):
+
+```sh
+gh repo clone wisedev-pstach/RiftTask /tmp/rifttask-install && /tmp/rifttask-install/scripts/install.sh && rm -rf /tmp/rifttask-install
+```
+
+This compiles native dependencies for your Mac's architecture (Apple Silicon / Intel), packages the application, and installs `RiftTask.app` into `/Applications` (or `~/Applications`). Launch with:
+
+```sh
+open /Applications/RiftTask.app
+```
+
+### Windows (PowerShell)
+Prerequisites: official GitHub CLI (`gh auth status`), Git, and Node.js v20+:
+
+```powershell
+gh repo clone wisedev-pstach/RiftTask "$env:TEMP\rifttask-install"; & "$env:TEMP\rifttask-install\scripts\install.ps1"; Remove-Item -Recurse -Force "$env:TEMP\rifttask-install"
+```
+
+This packages RiftTask, installs it to `%LOCALAPPDATA%\Programs\RiftTask`, and creates Start Menu and Desktop shortcuts.
+
+### Checking Prerequisites
+You can inspect your machine's environment and prerequisite status without modifying anything:
+
+- macOS / Linux: `./scripts/install.sh --check`
+- Windows: `powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Check`
 
 ## Verification
 
