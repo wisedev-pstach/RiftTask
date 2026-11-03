@@ -1,0 +1,65 @@
+# Source-build bootstrap safety evidence — 3 November 2026
+
+## Delivered slice, not whole-product acceptance
+
+Feature scope is frozen. This pass hardens the existing source-build bootstrap and documents an honest native-test handoff. It does **not** establish a released installer, successful native installation, signed/notarized artifacts, corruption-salvage UX, or whole-product completion.
+
+Both bootstraps always clone `wisedev-pstach/RiftTask` at explicit `feat/cloud-persistence` into an invocation-owned fresh build tree. They no longer build in a user's checkout or silently fetch default `main`. This is a **moving feature ref**, not an immutable commit or verified release pin. The README's initial authenticated clone explicitly selects the same branch; its commands must only be distributed after the parent reviews/publishes this slice there.
+
+All existing final destinations are refused, including empty directories, ordinary files and symlinks/reparse points. Linux also refuses an existing command launcher. No app/data destination is recursively removed, no upgrade is attempted, and no shared Windows shortcuts are written. New destinations are reserved without overwrite before copying. Clone/build failures occur before final destination creation. Copy/interruption failure may leave a **new partial directory**, never an automatically deleted old install. Recursive cleanup is limited to the fresh temporary tree owned by this invocation; PowerShell restores location first. This is not a hostile-concurrent-OS-user security boundary.
+
+Quarantine stripping is removed. No execution-policy, Gatekeeper, sandbox or other security bypass is offered. Linux launchers encode the target with Bash `printf %q`; argument text is forwarded through `"$@"` as data. Architecture flags and unpacked output paths are selected explicitly for x64/ARM64, and a matching expected executable must exist. Native commands fail closed; PowerShell checks `$LASTEXITCODE` immediately in its common `Invoke-Native` adapter for version/auth, clone, npm install/rebuild/build and packaging. No output-short-circuiting `Select-Object -First` can bypass that check.
+
+`--check`/`--dry-run` and `-Check`/`-DryRun` fail on authentication denial rather than announcing readiness. They do not clone/build/create directories, change credentials, or touch application data. They check tools, architecture, conservative Node baseline and destination refusal, **not** full compiler availability, private-repo access, download success or native GUI launch.
+
+## Observed vertical RED → GREEN
+
+Unless otherwise noted, command: `node --test tests/install-scripts.test.cjs`. Each numbered behavior was added and observed RED before its implementation, then rerun GREEN before the next behavior. Intermediate fixture mistakes (missing `cat`, an off-by-one log assertion, exported `OS` colliding with the script's own OS normalization) were corrected before accepting a defect's RED; they are not claimed as product defects.
+
+| Behavior | Actual RED | Actual GREEN |
+| --- | --- | --- |
+| Unauthenticated Bash check | 1 passed / 1 failed: returned zero and announced ready after failed auth | 2 passed |
+| Explicit source feature ref / fresh owned tree | 2 passed / 1 failed: clone omitted `--branch feat/cloud-persistence` | 3 passed |
+| Existing destination preservation | 3 passed / 1 failed: old directory replaced and success announced | 4 passed; file/directory/symlink preserved |
+| Literal Linux launcher paths | 4 passed / 1 failed: generated shell had unmatched quote at launch | 5 passed; actual fixture executable received literal argument; no injected directories |
+| macOS quarantine behavior (simulated OS) | 5 passed / 1 failed: `xattr` invoked | 6 passed; no quarantine command |
+| Linux ARM64 packaging/output | 6 passed / 1 failed: no explicit ARM64 builder invocation | 7 passed |
+| PowerShell native exit adapter, source-contract test only | targeted 0 passed / 1 failed: adapter missing | targeted 1 passed |
+| PowerShell literal destination refusal, source-contract only | targeted 0 / 1: refusal absent | 2 PowerShell contracts passed |
+| PowerShell isolated explicit ref and owned cleanup, source-contract only | targeted 0 / 1: feature ref absent | 3 PowerShell contracts passed |
+| PowerShell ARM64 output, source-contract only | targeted 0 / 1: architecture discriminator absent | 4 PowerShell contracts passed |
+| Missing Linux executable despite zero packaging exit | targeted 0 / 1: stale directory copied and success announced | all 12 then-current tests passed |
+| Unsupported Node 20 | targeted 0 / 1: check returned zero for Node 20.19.0 | all 13 then-current tests passed |
+| PowerShell preview Node baseline/no shared shortcuts, source-contract only | targeted 0 / 1: baseline absent | 5 PowerShell contracts passed |
+| macOS ARM64 wrong-architecture fallback | targeted 0 / 1: x64 output installed on simulated ARM64 | all 15 then-current tests passed |
+| PowerShell output pipeline cannot skip native check, source-contract only | targeted 0 / 1: `Select-Object -First` remained | targeted 1 passed |
+| Missing `--dest` value | targeted 0 / 1: unbound `$2` rather than actionable error | final fixture suite passed |
+| Review blocker: relative `TMPDIR` | targeted 0 passed / 1 failed: `TMPDIR=tmp` returned success after clone/build/install | targeted 1 passed: rejects with absolute-path guidance before mktemp/clone; fixture temp directory contains only unchanged unrelated sentinel, no owned-tree leak or destination |
+| Review: macOS printed hostile launch path | targeted 0 passed / 1 failed: stdout included raw hostile path in `open` command | targeted 1 passed: plain labeled path and file-manager instruction, no printed launch command |
+| Review: PowerShell printed hostile launch path, source-contract only | targeted 0 passed / 1 failed: `Write-Host` emitted raw path in `&` command | targeted 1 passed: plain labeled executable path and file-manager instruction; hostile-path text substitution checked as data, not PowerShell execution |
+
+PowerShell targeted commands used `node --test --test-name-pattern='<behavior>' tests/install-scripts.test.cjs`. These RED/GREEN observations establish **textual source contracts only**, never PowerShell parser/native execution. `command -v pwsh` found no executable; no PowerShell was downloaded or installed. The optional parser test explicitly skips when unavailable.
+
+Additional executable-fixture regressions were added for already-working fail-closed behavior (not falsely represented as new RED fixes): clone, npm ci, native rebuild, build and package failures with stale runnable output; successful read-only checks; missing gh/node/npm/git; and real local Git source-ref selection. Each fixture invocation has a new scratch HOME/TMPDIR/controlled PATH, no inherited credentials or real gh/npm, and a Node fixture shebang derived from `process.execPath`. Required POSIX utilities are discovered, not assumed at host-specific paths. Only fixture-owned paths are installed/copied/deleted. No actual host-system installation occurred.
+
+The real local-Git regression creates isolated default `main` and feature commits, clones via `file://` with the bootstrap's actual depth/branch arguments, and requires the feature marker before the fixture build succeeds. Its original checkout remains on `main` unchanged. These local fixture commits are not changes/commits to the RiftTask working repository, and no network or credential helper is used.
+
+## Final real execution
+
+- `node --test tests/install-scripts.test.cjs`: **23 tests: 22 passed, 0 failed, 1 skipped**. Skip: PowerShell parser unavailable. Includes relative-TMPDIR rejection/no-leak sentinel preservation, hostile macOS printed-path regression and PowerShell plain-output source contract, plus prior fixtures.
+- `npm test`: exit **0**. Core/integration: **136 tests, 135 passed, 0 failed, 1 skipped** (same PowerShell parser gate). Renderer: **40 passed**, four files. Full output recorded during execution at scratch `rifttask-review-npm-test.log`; it is not a committed artifact.
+- `npm run build`: exit **0**; Vite 8.3.5, 21 modules, existing >500 kB chunk warning. Output recorded at scratch `rifttask-review-build.log`. No new UI changes or screenshots are claimed.
+- `git diff --check` and `git diff --cached --check`: exit **0**.
+- Actual installed dependency engines read from local package metadata: Vite `^20.19.0 || >=22.12.0`, Vitest `^22.12.0 || ^24.0.0 || >=26.0.0`, jsdom `^22.22.2 || ^24.15.0 || >=26.0.0`. The bootstrap deliberately supports the conservative subset Node 24.15+ in 24.x or >=26; Node 22 is not offered by this preview.
+
+## Native acceptance / parent handoff
+
+| Gate | Evidence / remaining action |
+| --- | --- |
+| Linux installer control flow | Executed Bash against real scratch filesystem and controlled executable fixtures. Not a real dependency build/install or Electron launch. |
+| macOS x64/ARM64 | OS/path logic simulated using executable fixtures on Linux. Actual macOS copy semantics, compiler/dependency build, Gatekeeper/signing and GUI launch remain unverified. |
+| Windows x64/ARM64 | Source-contract checks only. PowerShell parser/runtime unavailable; native exit/failure/cwd/literal `[ ]` paths/reparse-point preservation/ARM64 packaging and launch need execution on Windows. No regex result substitutes for that gate. |
+| Existing install/data | Real POSIX file/directory/symlink fixture preservation verified. Native Windows reparse-point and macOS bundle behavior still require platform tests. No real application data accessed. |
+| Publication | Parent independently reviews, reruns tests, handles any source commit/private feature push/draft-PR readback. This worker made no source commit, push, merge, release, workflow push, auth/scope change or cloud/data-repository call. Parent `docs/TODAY.md` edit left untouched. |
+
+Before claiming native installation support, run the README preview on each target OS/architecture with a genuinely new destination and synthetic app data only. Exercise failed clone/install/rebuild/build/package, stale/missing/wrong-architecture output, failed auth in check mode, literal metacharacter paths, all existing destination types and read-only check/cwd cleanup. Validate actual packaged PTY and Electron launch without disabling platform protections. Preserve any old app and data. Keep the delivery draft while these gates are open.

@@ -1,13 +1,15 @@
 <#
 .SYNOPSIS
-    One-command installer for RiftTask on Windows (PowerShell 5.1+ / PowerShell Core).
+    Source-build preview for RiftTask on Windows (PowerShell 5.1+ / PowerShell Core).
     Authenticated via official GitHub CLI (gh).
 
 .DESCRIPTION
     Checks prerequisites (gh, git, node, npm), verifies authentication,
-    clones or uses local repository, compiles native dependencies (node-pty),
+    clones fresh feat/cloud-persistence, compiles native dependencies (node-pty),
     packages RiftTask and installs it to %LOCALAPPDATA%\Programs\RiftTask,
-    creating Start Menu and Desktop shortcuts.
+    refusing all existing destinations. No shared shortcuts or upgrades.
+    Requires Node 24.15+ (24.x) or 26+, Python 3 and MSVC C++ build tools.
+    Native Windows execution is not yet verified.
 
 .PARAMETER Check
     Inspects environment and prerequisites without installing.
@@ -16,7 +18,7 @@
     Alias for -Check.
 
 .PARAMETER Source
-    Forces building from source.
+    Compatibility flag; this preview always builds from fresh source.
 
 .PARAMETER Dest
     Custom installation directory (default: %LOCALAPPDATA%\Programs\RiftTask).
@@ -35,6 +37,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Native failures do not reliably throw in Windows PowerShell 5.1.
+function Invoke-Native {
+    param([string]$Command, [string[]]$Arguments)
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command failed (exit $LASTEXITCODE). Installation stopped."
+    }
+}
+
 if ($Help) {
     Get-Help $MyInvocation.MyCommand.Path -Detailed
     exit 0
@@ -47,7 +58,12 @@ $CheckOnly = $Check.IsPresent -or $DryRun.IsPresent
 Write-Host "Checking environment for RiftTask installation..." -ForegroundColor Cyan
 
 # Check architecture
-$Arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "ia32" }
+$RawArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+$Arch = switch ($RawArch.ToUpperInvariant()) {
+    'ARM64' { 'arm64' }
+    'AMD64' { 'x64' }
+    default { throw "Unsupported Windows architecture: $RawArch" }
+}
 Write-Host "  OS: Windows ($([System.Environment]::OSVersion.VersionString))"
 Write-Host "  Arch: $Arch"
 
@@ -56,7 +72,7 @@ $Errors = 0
 # Check GitHub CLI
 $GhCmd = Get-Command gh -ErrorAction SilentlyContinue
 if ($GhCmd) {
-    $GhVer = (gh --version | Select-Object -First 1)
+    $GhVer = (Invoke-Native gh @('--version'))
     Write-Host "  GitHub CLI (gh): OK ($GhVer)" -ForegroundColor Green
 } else {
     Write-Warning "  GitHub CLI (gh): NOT FOUND in PATH."
@@ -67,7 +83,7 @@ if ($GhCmd) {
 # Check Git
 $GitCmd = Get-Command git -ErrorAction SilentlyContinue
 if ($GitCmd) {
-    $GitVer = (git --version)
+    $GitVer = (Invoke-Native git @('--version'))
     Write-Host "  Git: OK ($GitVer)" -ForegroundColor Green
 } else {
     Write-Warning "  Git: NOT FOUND in PATH."
@@ -79,12 +95,16 @@ if ($GitCmd) {
 $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
 $NpmCmd = Get-Command npm -ErrorAction SilentlyContinue
 if ($NodeCmd -and $NpmCmd) {
-    $NodeVer = (node --version)
-    $NpmVer = (npm --version)
+    $NodeVer = (Invoke-Native node @('--version'))
+    $NodeVersion = [version]($NodeVer.Trim().TrimStart('v'))
+    if (-not (($NodeVersion.Major -eq 24 -and $NodeVersion -ge [version]'24.15.0') -or $NodeVersion.Major -ge 26)) {
+        throw 'Unsupported Node.js: use Node 24.15+ (24.x) or 26+.'
+    }
+    $NpmVer = (Invoke-Native npm @('--version'))
     Write-Host "  Node.js: OK ($NodeVer, npm $NpmVer)" -ForegroundColor Green
 } else {
     Write-Warning "  Node.js / npm: NOT FOUND in PATH."
-    Write-Host "    Install Node.js v20+ from https://nodejs.org/ or 'winget install --id OpenJS.NodeJS'." -ForegroundColor Yellow
+    Write-Host "    Install Node.js 24.15+ (24.x) or 26+ from https://nodejs.org/." -ForegroundColor Yellow
     $Errors++
 }
 
@@ -94,100 +114,76 @@ if ($Errors -gt 0) {
 }
 
 # Check GitHub Authentication
-& gh auth status *>$null
-if ($LASTEXITCODE -eq 0) {
+try {
+    Invoke-Native gh @('auth', 'status') *>$null
     Write-Host "  GitHub Authentication: OK" -ForegroundColor Green
-} else {
-    Write-Warning "  GitHub Authentication: NOT AUTHENTICATED"
-    Write-Host "    Please run 'gh auth login' to authenticate with your GitHub account." -ForegroundColor Yellow
-    if (-not $CheckOnly) {
-        exit 1
-    }
+} catch {
+    Write-Warning "GitHub authentication failed. Run gh auth login on your own computer."
+    exit 1
+}
+
+$TargetDir = if ($Dest) { $Dest } else { Join-Path $env:LOCALAPPDATA "Programs\$AppName" }
+$TargetDir = [System.IO.Path]::GetFullPath($TargetDir)
+# Get-Item -Force also detects reparse points; use literal paths throughout.
+if (Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue) {
+    throw "Error: refusing existing destination: $TargetDir (no upgrades in this preview)."
 }
 
 if ($CheckOnly) {
-    Write-Host "`nPrerequisite check completed successfully. Ready to install RiftTask." -ForegroundColor Green
+    Write-Host "Tools/authentication/destination check passed. Compilation and native launch remain unverified." -ForegroundColor Green
     exit 0
 }
 
-# Determine build directory
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ParentDir = Split-Path -Parent $ScriptDir
-$TempBuildDir = $null
-
-if ((Test-Path "$ParentDir\package.json") -and (Select-String -Path "$ParentDir\package.json" -Pattern '"name":\s*"rifttask"')) {
-    $BuildDir = $ParentDir
-    Write-Host "Using existing repository directory: $BuildDir" -ForegroundColor Cyan
-} else {
-    $TempBuildDir = Join-Path $env:TEMP ("rifttask-build-" + [System.Guid]::NewGuid().ToString("N"))
-    Write-Host "Cloning RiftTask into temporary directory: $TempBuildDir..." -ForegroundColor Cyan
-    gh repo clone $Repo $TempBuildDir -- --depth=1
-    $BuildDir = $TempBuildDir
-}
-
+# Always clone an explicit feature ref; never build in the user's checkout.
+$SourceRef = 'feat/cloud-persistence'
+$TempBuildDir = Join-Path ([System.IO.Path]::GetTempPath()) ("rifttask-build-" + [System.Guid]::NewGuid().ToString('N'))
+$BuildDir = Join-Path $TempBuildDir 'source'
+$OwnedTemp = $false
 $PushedLocation = $false
 try {
-    Push-Location $BuildDir
+    New-Item -ItemType Directory -Path $TempBuildDir -ErrorAction Stop | Out-Null
+    $OwnedTemp = $true
+    Invoke-Native gh @('repo', 'clone', $Repo, $BuildDir, '--', '--depth=1', '--branch', $SourceRef)
+    Push-Location -LiteralPath $BuildDir
     $PushedLocation = $true
 
     Write-Host "Building RiftTask from source..." -ForegroundColor Cyan
-    npm ci --no-audit --no-fund
-    npm run native:rebuild
-    npm run build
+    Invoke-Native npm @('ci', '--no-audit', '--no-fund')
+    Invoke-Native npm @('run', 'native:rebuild')
+    Invoke-Native npm @('run', 'build')
 
     Write-Host "Packaging Windows application..." -ForegroundColor Cyan
-    npx electron-builder --win --$Arch --dir
+    Invoke-Native npx @('--no-install', 'electron-builder', '--win', "--$Arch", '--dir', '--publish', 'never')
 
-    $WinBundle = Join-Path $BuildDir "release\win-unpacked"
-    if (-not (Test-Path $WinBundle)) {
+    $BundlePath = if ($Arch -eq 'arm64') { 'release\win-arm64-unpacked' } else { 'release\win-unpacked' }
+    $WinBundle = Join-Path $BuildDir $BundlePath
+    if (-not (Test-Path -LiteralPath (Join-Path $WinBundle "$AppName.exe") -PathType Leaf)) {
         Write-Error "Windows unpacked directory was not found after packaging."
         exit 1
     }
 
-    $TargetDir = if ($Dest) { $Dest } else { Join-Path $env:LOCALAPPDATA "Programs\$AppName" }
     Write-Host "Installing to $TargetDir..." -ForegroundColor Cyan
 
-    if (Test-Path $TargetDir) {
-        Remove-Item -Recurse -Force $TargetDir
+    # No -Force: exclusive reservation refuses even an empty existing directory.
+    New-Item -ItemType Directory -Path $TargetDir -ErrorAction Stop | Out-Null
+    foreach ($Child in Get-ChildItem -LiteralPath $WinBundle -Force) {
+        Copy-Item -LiteralPath $Child.FullName -Destination $TargetDir -Recurse -ErrorAction Stop
     }
-    New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-    Copy-Item -Recurse -Force (Join-Path $WinBundle "*") $TargetDir
 
     $ExePath = Join-Path $TargetDir "$AppName.exe"
 
-    # Create Shortcuts via WScript.Shell COM object
-    try {
-        $WshShell = New-Object -ComObject WScript.Shell
-
-        # Start Menu Shortcut
-        $StartMenuDir = [Environment]::GetFolderPath("Programs")
-        $StartShortcut = $WshShell.CreateShortcut((Join-Path $StartMenuDir "$AppName.lnk"))
-        $StartShortcut.TargetPath = $ExePath
-        $StartShortcut.WorkingDirectory = $TargetDir
-        $StartShortcut.Save()
-
-        # Desktop Shortcut
-        $DesktopDir = [Environment]::GetFolderPath("Desktop")
-        $DesktopShortcut = $WshShell.CreateShortcut((Join-Path $DesktopDir "$AppName.lnk"))
-        $DesktopShortcut.TargetPath = $ExePath
-        $DesktopShortcut.WorkingDirectory = $TargetDir
-        $DesktopShortcut.Save()
-
-        Write-Host "Created Start Menu and Desktop shortcuts." -ForegroundColor Green
-    } catch {
-        Write-Warning "Could not create desktop shortcut: $_"
-    }
+    # Source preview deliberately creates no shared Desktop/Start Menu shortcuts.
 
     Write-Host "`n=== RiftTask installation complete! ===" -ForegroundColor Green
     Write-Host "Installed at: $TargetDir"
-    Write-Host "Launch with:"
-    Write-Host "  & `"$ExePath`"" -ForegroundColor Yellow
+    Write-Host "Application executable: $ExePath"
+    Write-Host "Open the application at the path above using your file manager."
 }
 finally {
     if ($PushedLocation) {
         Pop-Location
     }
-    if ($TempBuildDir -and (Test-Path $TempBuildDir)) {
-        Remove-Item -Recurse -Force $TempBuildDir -ErrorAction SilentlyContinue
+    if ($OwnedTemp) {
+        Remove-Item -LiteralPath $TempBuildDir -Recurse -Force -ErrorAction Continue
     }
 }

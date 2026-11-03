@@ -11,6 +11,12 @@ export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[]
 }
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
+ it('explains manual CLI sign-in and optional cloud without promising an automatic login launch',async()=>{
+  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});render(<App bridge={api}/>);
+  expect(await screen.findByText(/gh auth login --hostname github.com/)).toBeInTheDocument();
+  expect(screen.getByText(/optional manual cloud sync/i)).toBeInTheDocument();
+  expect(screen.queryByText(/Your browser or native terminal will handle GitHub sign-in/)).not.toBeInTheDocument();
+ });
  it('defaults to project tiles with explicit live-status counts, not a mixed task list',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'other',name:'Other project'});
  w.tasks=['doing','backlog','done'].map((status,index)=>({id:`t${index}`,projectId:'project',title:`Private ${status}`,notes:'',status,priority:'normal',today:false}));
@@ -248,7 +254,7 @@ describe('workspace',()=>{
  it('explains missing GitHub CLI and offers check sign-in after verification fails',async()=>{
  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:false});api.login.mockRejectedValueOnce(new Error('Finish sign-in in your terminal'));
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Your work, on this device.'});
- expect(screen.getByText('GitHub CLI is required. Install gh, then check sign-in.')).toBeInTheDocument();
+ expect(screen.getByText('GitHub CLI is required. Install gh and run gh auth login --hostname github.com --git-protocol https --web in your terminal, then check sign-in.')).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Check sign-in'}));expect(await screen.findByRole('alert')).toHaveTextContent('Finish sign-in in your terminal');
  await u.click(screen.getByRole('button',{name:'Check sign-in'}));expect(await screen.findByRole('heading',{name:'Projects'})).toBeInTheDocument();
  });

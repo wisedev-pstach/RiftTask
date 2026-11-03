@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RiftTask - One-command installer for macOS and Linux
+# RiftTask source-build preview for macOS and Linux (native acceptance pending)
 # Authenticated via official GitHub CLI (gh)
 set -euo pipefail
 
@@ -10,20 +10,21 @@ usage() {
   cat <<EOF
 Usage: install.sh [OPTIONS]
 
-One-command installer for RiftTask (macOS and Linux).
-Requires official GitHub CLI (gh), git, and Node.js v20+.
+Source-build preview for RiftTask (macOS and Linux), feat/cloud-persistence.
+Requires authenticated official gh, git, Node 24.15+ (24.x) or 26+, npm/npx,
+Python 3 and platform C/C++ build tools. Native installation is not verified.
 
 Options:
   --check        Inspect environment and prerequisites without installing
   --dry-run      Alias for --check
-  --source       Force building from source even if a release asset is available
-  --dest <dir>   Specify custom installation directory
+  --source       Compatibility flag; this preview always builds fresh source
+  --dest <dir>   Exact NEW app directory (macOS: must end in .app)
   --help, -h     Show this help message
 EOF
 }
 
 CHECK_ONLY=false
-FORCE_SOURCE=false
+
 CUSTOM_DEST=""
 
 while [[ $# -gt 0 ]]; do
@@ -33,10 +34,10 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --source)
-      FORCE_SOURCE=true
       shift
       ;;
     --dest)
+      [[ $# -ge 2 && -n "$2" ]] || { echo 'Error: --dest needs a new directory path.' >&2; exit 1; }
       CUSTOM_DEST="$2"
       shift 2
       ;;
@@ -111,11 +112,17 @@ fi
 
 if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
   NODE_VER="$(node --version)"
+  # Conservative preview baseline satisfying current Vite/Vitest/jsdom engines.
+  if [[ ! "$NODE_VER" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] ||
+     ! (( (BASH_REMATCH[1] == 24 && BASH_REMATCH[2] >= 15) || BASH_REMATCH[1] >= 26 )); then
+    echo "Error: unsupported Node.js $NODE_VER; use Node 24.15+ (24.x) or 26+." >&2
+    exit 1
+  fi
   NPM_VER="$(npm --version)"
   echo "  Node.js: OK ($NODE_VER, npm $NPM_VER)"
 else
   echo "  Node.js: NOT FOUND" >&2
-  echo "    Error: Node.js and npm are required (v20+ recommended)." >&2
+  echo "    Error: Node.js and npm are required (Node 24.15+ in 24.x or 26+)." >&2
   echo "    Please install Node.js (e.g. 'brew install node' on macOS)." >&2
   ERRORS=$((ERRORS + 1))
 fi
@@ -141,38 +148,45 @@ if gh auth status >/dev/null 2>&1; then
 else
   echo "  GitHub Authentication: NOT AUTHENTICATED" >&2
   echo "    Please run 'gh auth login' to authenticate with your GitHub account." >&2
-  if [[ "$CHECK_ONLY" != "true" ]]; then
+  exit 1
+fi
+
+# --dest is the exact new app directory (a .app bundle on macOS).
+if [[ "$OS" == "mac" ]]; then
+  TARGET_DIR="${CUSTOM_DEST:-$HOME/Applications/$APP_NAME.app}"
+  [[ "$TARGET_DIR" == *.app ]] || { echo 'Error: macOS destination must end in .app' >&2; exit 1; }
+else
+  TARGET_DIR="${CUSTOM_DEST:-$HOME/.local/share/rifttask}"
+fi
+[[ "$TARGET_DIR" == /* ]] || TARGET_DIR="$PWD/$TARGET_DIR"
+LAUNCHER_DIR="$HOME/.local/bin"
+refuse_existing() {
+  if [[ -e "$1" || -L "$1" ]]; then
+    echo "Error: refusing existing destination: $1 (no upgrades in this preview)." >&2
     exit 1
   fi
-fi
+}
+refuse_existing "$TARGET_DIR"
+if [[ "$OS" == "linux" ]]; then refuse_existing "$LAUNCHER_DIR/rifttask"; fi
 
 if [[ "$CHECK_ONLY" == "true" ]]; then
   echo ""
-  echo "Prerequisite check completed successfully. Ready to install RiftTask."
+  echo "Tools/authentication/destination check passed. Compilation and native launch remain unverified."
   exit 0
 fi
 
-# Determine source directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PARENT_DIR="$(dirname "$SCRIPT_DIR")"
-TEMP_BUILD_DIR=""
-
-if [[ -f "$PARENT_DIR/package.json" ]] && grep -q '"name": "rifttask"' "$PARENT_DIR/package.json" 2>/dev/null; then
-  BUILD_DIR="$PARENT_DIR"
-  echo "Using existing repository directory: $BUILD_DIR"
-else
-  TEMP_BUILD_DIR="$(mktemp -d -t rifttask-install-XXXXXX)"
-  BUILD_DIR="$TEMP_BUILD_DIR"
-  echo "Cloning RiftTask into temporary build directory: $BUILD_DIR..."
-  gh repo clone "$REPO" "$BUILD_DIR" -- --depth=1
-fi
-
+# Always build an isolated fresh copy of the explicit feature ref. Never run
+# npm in a user's checkout or reuse its possibly stale release output.
+[[ "${TMPDIR:-/tmp}" == /* ]] || { echo 'Error: TMPDIR must be an absolute directory path; set it to an existing absolute directory or unset TMPDIR.' >&2; exit 1; }
+TEMP_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rifttask-install-XXXXXX")"
 cleanup() {
-  if [[ -n "$TEMP_BUILD_DIR" && -d "$TEMP_BUILD_DIR" ]]; then
-    rm -rf "$TEMP_BUILD_DIR"
-  fi
+  cd / || return
+  rm -rf -- "$TEMP_BUILD_DIR"
 }
 trap cleanup EXIT
+BUILD_DIR="$TEMP_BUILD_DIR/source"
+echo "Cloning $REPO at feat/cloud-persistence..."
+gh repo clone "$REPO" "$BUILD_DIR" -- --depth=1 --branch feat/cloud-persistence
 
 cd "$BUILD_DIR"
 
@@ -183,72 +197,57 @@ npm run build
 
 if [[ "$OS" == "mac" ]]; then
   echo "Packaging macOS application bundle..."
-  npx electron-builder --mac --"$ARCH" --dir
+  npx --no-install electron-builder --mac --"$ARCH" --dir --publish never
 
-  # Locate built .app bundle
-  APP_BUNDLE=""
-  for candidate in "release/mac-$ARCH/$APP_NAME.app" "release/mac/$APP_NAME.app"; do
-    if [[ -d "$candidate" ]]; then
-      APP_BUNDLE="$candidate"
-      break
-    fi
-  done
-
-  if [[ -z "$APP_BUNDLE" ]]; then
-    echo "Error: Application bundle was not found after packaging." >&2
+  if [[ "$ARCH" == "arm64" ]]; then
+    APP_BUNDLE="release/mac-arm64/$APP_NAME.app"
+  else
+    APP_BUNDLE="release/mac/$APP_NAME.app"
+  fi
+  if [[ ! -x "$APP_BUNDLE/Contents/MacOS/$APP_NAME" ]]; then
+    echo "Error: matching architecture application executable was not found after packaging." >&2
     exit 1
   fi
 
-  # Determine install location
-  if [[ -n "$CUSTOM_DEST" ]]; then
-    if [[ "$CUSTOM_DEST" == *.app ]]; then
-      TARGET_APP="$CUSTOM_DEST"
-    else
-      TARGET_APP="$CUSTOM_DEST/$APP_NAME.app"
-    fi
-  elif [[ -w "/Applications" ]]; then
-    TARGET_APP="/Applications/$APP_NAME.app"
-  else
-    mkdir -p "$HOME/Applications"
-    TARGET_APP="$HOME/Applications/$APP_NAME.app"
-  fi
-
-  echo "Installing to $TARGET_APP..."
-  rm -rf "$TARGET_APP"
-  cp -R "$APP_BUNDLE" "$TARGET_APP"
-
-  # Strip quarantine if present
-  xattr -d com.apple.quarantine "$TARGET_APP" 2>/dev/null || true
+  # Never change Gatekeeper/quarantine protections or replace existing apps.
+  mkdir -p -- "$(dirname "$TARGET_DIR")"
+  mkdir -- "$TARGET_DIR"
+  cp -R -- "$APP_BUNDLE/." "$TARGET_DIR/"
+  TARGET_APP="$TARGET_DIR"
 
   echo ""
   echo "=== RiftTask installation complete! ==="
   echo "Application installed at: $TARGET_APP"
-  echo "Launch it with:"
-  echo "  open \"$TARGET_APP\""
+  echo "Open the application at the path above using your file manager."
 
 elif [[ "$OS" == "linux" ]]; then
   echo "Packaging Linux application..."
-  npm run pack
+  npx --no-install electron-builder --linux --"$ARCH" --dir --publish never
 
-  LINUX_BUNDLE="release/linux-unpacked"
-  if [[ ! -d "$LINUX_BUNDLE" ]]; then
-    echo "Error: Linux unpacked directory was not found after packaging." >&2
+  if [[ "$ARCH" == "arm64" ]]; then
+    LINUX_BUNDLE="release/linux-arm64-unpacked"
+  else
+    LINUX_BUNDLE="release/linux-unpacked"
+  fi
+  if [[ ! -x "$LINUX_BUNDLE/rifttask" ]]; then
+    echo "Error: Linux executable was not found after packaging." >&2
     exit 1
   fi
 
-  TARGET_DIR="${CUSTOM_DEST:-$HOME/.local/share/rifttask}"
-  echo "Installing to $TARGET_DIR..."
-  rm -rf "$TARGET_DIR"
-  mkdir -p "$(dirname "$TARGET_DIR")"
-  cp -R "$LINUX_BUNDLE" "$TARGET_DIR"
+  # Reserve a new directory exclusively; never remove a user-selected path.
+  mkdir -p -- "$(dirname "$TARGET_DIR")"
+  mkdir -- "$TARGET_DIR"
+  cp -R -- "$LINUX_BUNDLE/." "$TARGET_DIR/"
 
   # Create command launcher
   LAUNCHER_DIR="$HOME/.local/bin"
-  mkdir -p "$LAUNCHER_DIR"
-  cat <<LAUNCHER > "$LAUNCHER_DIR/rifttask"
-#!/usr/bin/env bash
-exec "$TARGET_DIR/rifttask" "\$@"
-LAUNCHER
+  mkdir -p -- "$LAUNCHER_DIR"
+  # Bash printf %q encodes a pathname as one shell word; do not interpolate
+  # raw path text into executable shell code. noclobber protects old launchers.
+  (
+    set -o noclobber
+    { printf '#!/usr/bin/env bash\nexec '; printf '%q ' "$TARGET_DIR/rifttask"; printf '"$@"\n'; } > "$LAUNCHER_DIR/rifttask"
+  )
   chmod +x "$LAUNCHER_DIR/rifttask"
 
   echo ""
