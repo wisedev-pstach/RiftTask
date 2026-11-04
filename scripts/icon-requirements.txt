@@ -1,0 +1,3 @@
+# Optional, offline-app-independent developer tooling only.
+CairoSVG==2.9.0
+Pillow==13.0.0

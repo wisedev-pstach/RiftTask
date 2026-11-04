@@ -31,3 +31,14 @@ it('requires verified repository and plaintext/history consent before enabling; 
  bridge.cloudSync.mockRejectedValueOnce(new Error('Cloud unavailable'));await u.click(screen.getByRole('button',{name:'Sync now'}));expect(await screen.findByRole('alert')).toHaveTextContent('Cloud unavailable');
  await u.click(screen.getByRole('button',{name:'Disable cloud'}));await waitFor(()=>expect(screen.getByText(/Cloud off/)).toBeInTheDocument());
 });
+
+it('shows configuration loading without claiming cloud is off or starting a sync',async()=>{
+ let finish;const bridge={cloudStatus:vi.fn(()=>new Promise(r=>finish=r)),cloudSync:vi.fn()};render(<CloudPanel bridge={bridge} account={{id:1,login:'example'}} onWorkspace={()=>{}} onBusy={()=>{}}/>);expect(screen.getByRole('status')).toHaveTextContent('Loading cloud settings');expect(screen.queryByText(/Cloud off/)).not.toBeInTheDocument();expect(bridge.cloudSync).not.toHaveBeenCalled();await act(async()=>finish({state:'off'}));expect(await screen.findByText(/Cloud off/)).toBeInTheDocument();
+});
+it('requires exact selected remote revision confirmation before replacing local workspace',async()=>{
+ const workspace={version:1,projects:[],categories:[],tasks:[]},onWorkspace=vi.fn();const bridge={cloudStatus:vi.fn().mockResolvedValue({state:'ready'}),cloudSync:vi.fn().mockResolvedValueOnce({state:'download-required',pullSha:'remote-exact-sha'}).mockResolvedValueOnce({state:'verified',workspace})};const u=userEvent.setup();render(<CloudPanel bridge={bridge} account={{id:1,login:'example'}} onWorkspace={onWorkspace} onBusy={()=>{}}/>);await u.click(await screen.findByRole('button',{name:'Sync now'}));expect(bridge.cloudSync).toHaveBeenCalledExactlyOnceWith({});expect(onWorkspace).not.toHaveBeenCalled();expect(screen.getByText(/rolling local safety backup/)).toBeInTheDocument();await u.click(screen.getByRole('button',{name:'Back up locally and download'}));expect(bridge.cloudSync).toHaveBeenLastCalledWith({pullSha:'remote-exact-sha'});expect(onWorkspace).toHaveBeenCalledExactlyOnceWith(workspace);
+});
+
+it('ignores a late cloud download after the account panel unmounts',async()=>{
+ let finish;const update=vi.fn(),bridge={cloudStatus:vi.fn().mockResolvedValue({state:'ready'}),cloudSync:vi.fn(()=>new Promise(r=>finish=r))};const u=userEvent.setup(),panel=render(<CloudPanel bridge={bridge} account={{id:1,login:'first'}} onWorkspace={update} onBusy={()=>{}}/>);await u.click(await screen.findByRole('button',{name:'Sync now'}));panel.unmount();render(<CloudPanel bridge={{cloudStatus:async()=>({state:'off'})}} account={{id:2,login:'second'}} onWorkspace={update} onBusy={()=>{}}/>);await act(async()=>finish({state:'verified',workspace:{tasks:['old account']}}));expect(update).not.toHaveBeenCalled();expect(screen.getByText(/Cloud off/)).toBeInTheDocument();
+});

@@ -9,6 +9,7 @@ const account = { id: 1, login: 'developer', name: 'Developer' };
 export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[],updatedAt:new Date().toISOString()}) {
  return {session:vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true}),login:vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true}),load:vi.fn().mockResolvedValue(workspace),save:vi.fn(async w=>structuredClone(w)),logout:vi.fn().mockResolvedValue(),chooseDirectory:vi.fn().mockResolvedValue('/work/game'),openRepository:vi.fn().mockResolvedValue(),openTerminal:vi.fn().mockResolvedValue(),exportBackup:vi.fn().mockResolvedValue(true),importBackup:vi.fn().mockResolvedValue(null)};
 }
+async function accountSettings(u=userEvent){await u.click(screen.getByRole('button',{name:'Settings',exact:true}));await u.click(screen.getByRole('tab',{name:'Account & backups'}));}
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
  it('starts native login but keeps pending unauthenticated and Check sign-in verification-only',async()=>{
@@ -109,7 +110,7 @@ describe('workspace',()=>{
  render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  expect(screen.getByRole('button',{name:'Other project In progress 1 To do 0'})).toBeInTheDocument();expect(api.load).toHaveBeenCalledTimes(2);
  await u.click(screen.getByRole('button',{name:'Other project In progress 1 To do 0'}));await u.type(screen.getByRole('searchbox'),'Persisted');await u.click(screen.getByRole('tab',{name:'Project details'}));
- await u.click(screen.getByRole('button',{name:'Disconnect account'}));await screen.findByRole('heading',{name:'Your work, on this device.'});
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Disconnect account'}));await screen.findByRole('heading',{name:'Your work, on this device.'});
  stored=populated();stored.projects[0].name='Second account project';api.login.mockResolvedValue({account:{id:2,login:'second'},offline:false,ghAvailable:true});
  await u.click(screen.getByRole('button',{name:'Sign in with GitHub'}));await screen.findByRole('heading',{name:'Projects'});
  expect(screen.getByRole('button',{name:'Second account project In progress 0 To do 0'})).toBeInTheDocument();
@@ -272,15 +273,15 @@ describe('workspace',()=>{
  const api=bridge();api.session.mockResolvedValue({account,offline:true,ghAvailable:true});
  const u=userEvent.setup();render(<App bridge={api}/>);
  expect(await screen.findByText('Offline — using your last verified account. Data stays on this device.')).toBeInTheDocument();
- await u.click(screen.getByRole('button',{name:'Disconnect account'}));
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Disconnect account'}));
  expect(await screen.findByRole('heading',{name:'Your work, on this device.'})).toBeInTheDocument();expect(api.logout).toHaveBeenCalledOnce();
  });
  it('allows exported-backup recovery in load-error state only after explicit consent, without seeding or saving',async()=>{
  const api=bridge();api.load.mockRejectedValue(new Error('Workspace is corrupt. Original files retained.'));const restored=populated();api.importBackup.mockResolvedValueOnce(null).mockResolvedValueOnce(restored);const u=userEvent.setup();render(<App bridge={api}/>);
- await screen.findByRole('alert');expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
- await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();expect(screen.getByRole('dialog')).toHaveTextContent(/corrupt originals.*recovery archive/i);await u.click(screen.getByRole('button',{name:'Cancel'}));expect(api.importBackup).not.toHaveBeenCalled();
- await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();
- await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));await screen.findByRole('button',{name:'lose.DOT In progress 0 To do 0'});expect(api.save).not.toHaveBeenCalled();
+ await screen.findByRole('alert');expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();await accountSettings();expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();expect(screen.getByRole('dialog')).toHaveTextContent(/corrupt originals.*recovery archive/i);await u.click(screen.getByRole('button',{name:'Cancel'}));expect(api.importBackup).not.toHaveBeenCalled();
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));await screen.findByRole('button',{name:'lose.DOT In progress 0 To do 0'});expect(api.save).not.toHaveBeenCalled();
  });
  it('recovers from load failure without replacing data with an empty workspace',async()=>{
  const api=bridge();api.load.mockRejectedValueOnce(new Error('Workspace unreadable'));
@@ -295,7 +296,7 @@ describe('workspace',()=>{
  expect(await screen.findByText('Browser preview — session only. Changes disappear on reload; GitHub sign-in and native actions are unavailable.')).toBeInTheDocument();
  expect(await screen.findByRole('heading',{name:'Projects'})).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Sign in with GitHub'})).not.toBeInTheDocument();
- expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
+ await accountSettings();expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
  });
  it('uses native project actions and backup dialogs with explicit restore consent',async()=>{
  const api=bridge(populated());const restored=populated();restored.projects[0].name='Restored game';api.importBackup.mockResolvedValue(restored);
@@ -305,8 +306,8 @@ describe('workspace',()=>{
  expect(api.openTerminal).not.toHaveBeenCalled(); // External launcher is no longer the project terminal UI.
  await u.click(screen.getByRole('button',{name:'Edit project'}));await u.click(screen.getByRole('button',{name:'Choose directory'}));
  await waitFor(()=>expect(screen.getByLabelText('Local directory')).toHaveValue('/work/game'));await u.click(screen.getByRole('button',{name:'Cancel'}));
- await u.click(screen.getByRole('button',{name:'Export backup'}));await screen.findByText('Backup exported.');expect(api.exportBackup).toHaveBeenCalledOnce();
- await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Export backup'}));await screen.findByText('Backup exported.');expect(api.exportBackup).toHaveBeenCalledOnce();
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();
  await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));
  expect(await screen.findByRole('button',{name:'Restored game'})).toBeInTheDocument();
  expect(screen.getByRole('heading',{name:'Projects'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'Restored game In progress 0 To do 0'})).toBeInTheDocument();expect(screen.queryByRole('tab')).not.toBeInTheDocument();
@@ -394,7 +395,7 @@ describe('workspace',()=>{
  expect(await screen.findByRole('button',{name:'Edit category Development'})).toBeInTheDocument();
  expect(api.save.mock.lastCall[0].projects[0].categoryId).toBe(api.save.mock.lastCall[0].categories[0].id);
  });
- it('opens wired cloud settings without syncing or preventing local-only work',async()=>{const api=bridge();api.cloudStatus=vi.fn().mockResolvedValue({state:'off'});const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Cloud persistence'}));expect(await screen.findByRole('heading',{name:'Manual cloud persistence'})).toBeInTheDocument();expect(api.cloudStatus).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'New category'})).toBeEnabled();});
+ it('opens wired cloud settings without syncing or preventing local-only work',async()=>{const api=bridge();api.cloudStatus=vi.fn().mockResolvedValue({state:'off'});const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Settings',exact:true}));await u.click(screen.getByRole('tab',{name:'Cloud'}));expect(await screen.findByRole('heading',{name:'Manual cloud'})).toBeInTheDocument();expect(api.cloudStatus).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'New category'})).toBeEnabled();});
  it('requires sign-in before loading and opens the empty local workspace after verification',async()=>{
  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});
  render(<App bridge={api}/>);

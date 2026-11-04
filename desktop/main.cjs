@@ -45,6 +45,7 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
     const current = new BrowserWindow({
       title:'RiftTask',width:1320,height:900,minWidth:900,minHeight:640,show:false,
       backgroundColor:'#11131a',
+      icon:path.join(__dirname,'..','build','icon.png'),
       webPreferences:{
         preload:path.join(__dirname,'preload.cjs'),
         contextIsolation:true,sandbox:true,nodeIntegration:false,
