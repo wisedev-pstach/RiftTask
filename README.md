@@ -27,7 +27,7 @@ The source repository is **public**. Downloading, building and installing do **n
 - [Install on macOS or Linux](#install-on-macos-or-linux)
 - [Install on Windows](#install-on-windows)
 
-Run it from a directory without an existing `RiftTask-source-preview` folder. The setup captures the downloaded revision, builds that exact revision, and prints where it installed the app. **It does not launch it automatically.** This is a source build, not a binary download.
+The commands download and execute the setup script, then build public `main` in a temporary directory and print where the app was installed. Run downloaded code only if you trust this repository. **The setup does not launch the app automatically.** This is a source build, not a binary download.
 
 ### 4. Open the installed app and sign in
 
@@ -61,9 +61,9 @@ Private Git history is **not end-to-end encrypted**. Anyone with repository read
 ### Backups and common setup problems
 
 - Use **Export backup** to keep a separate JSON copy. **Import backup** replaces the active workspace only after confirmation. It is also available if loading fails; damaged originals are preserved in recovery archives before restore. Keep your exported file and archives.
-- **Existing source/app destination:** setup deliberately refuses to overwrite it. Do not delete your app data or old app to force installation. Use a new checkout name and an explicitly new app destination (`--dest` / `-Dest`); see the setup details below. Automatic upgrades are not included.
+- **Existing app destination:** setup deliberately refuses to overwrite it. Do not delete your app data or old app to force installation. Download and inspect the script, then choose an explicitly new app destination (`--dest` / `-Dest`); see the setup details below. Automatic upgrades are not included.
 - **App sign-in: missing gh / wrong GitHub account:** install the official CLI and check `gh auth status --hostname github.com` in your own terminal before retrying. Do not paste credentials into chat or the app.
-- **Native compilation failure:** check Python/C++ prerequisites, supported Node version and architecture. Keep the error and printed source revision for a bug report; do not blanket-enable dependency scripts or weaken OS security controls.
+- **Native compilation failure:** check Python/C++ prerequisites, supported Node version and architecture. Keep the error (and source SHA if using the advanced pinned setup) for a bug report; do not blanket-enable dependency scripts or weaken OS security controls.
 - **Unsigned-app or script-policy warning:** keep platform protections enabled and report the exact message. There is no signed/notarized release claimed here.
 - **New app folder, old tasks still visible:** app installation location and application-data location are separate. Use a fresh OS test account for isolated dummy tests; a new clone alone is not a new data profile.
 
@@ -120,25 +120,75 @@ Prerequisites on **your own computer**:
 
 ### Install on macOS or Linux
 
-Run this **one shell command** from a directory where `RiftTask-source-preview` does **not** already exist:
+Run this command in Terminal:
 
 ```sh
-test ! -e RiftTask-source-preview && test ! -L RiftTask-source-preview && git clone --depth=1 --branch main https://github.com/wisedev-pstach/RiftTask.git RiftTask-source-preview && ref="$(git -C RiftTask-source-preview rev-parse HEAD)" && bash RiftTask-source-preview/scripts/install.sh --ref "$ref"
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.sh | bash'
 ```
 
-The initial anonymous HTTPS clone explicitly selects the **moving `main` branch**, then captures its full commit SHA. `--ref` fetches, checks out detached, verifies and prints that exact commit in a separate fresh build tree; a branch advance during the build cannot silently change the built revision. Keep the printed SHA for reporting. This is reproducible source selection, **not signed release provenance**. Running the script without `--ref` / `-Ref` builds the current `main` tip. For a supplied reviewed full SHA use `--ref '<40-character lowercase SHA>'` / `-Ref '<SHA>'`; unsupported or unavailable refs fail closed.
+This executes downloaded code: run it only if you trust this repository and its current contents. The small `pipefail` wrapper makes a failed download return a failure instead of an empty successful Bash run. The script builds the current public `main` in its own temporary directory; it does not leave a source checkout in your working directory. This is a source build, not a prebuilt app or a pinned release.
 
 Defaults: macOS `~/Applications/RiftTask.app`; Linux `~/.local/share/rifttask` with launcher `~/.local/bin/rifttask` (add that directory to your `PATH` yourself if needed). `--dest '/absolute/new/path'` means the **exact final application directory**, not a parent; on macOS it must end in `.app`.
 
 ### Install on Windows
 
-Use a normal PowerShell session whose existing policy permits local scripts. This is **one PowerShell command** (the `& { ... }` block); every native failure stops the handoff:
+Run in a normal PowerShell session:
 
 ```powershell
-& { $ErrorActionPreference = 'Stop'; if (Get-Item -LiteralPath RiftTask-source-preview -Force -ErrorAction SilentlyContinue) { throw 'Source destination exists; choose a new directory' }; git clone --depth=1 --branch main https://github.com/wisedev-pstach/RiftTask.git RiftTask-source-preview; if ($LASTEXITCODE -ne 0) { throw 'Source clone failed' }; $Ref = git -C RiftTask-source-preview rev-parse HEAD; if ($LASTEXITCODE -ne 0) { throw 'Source revision failed' }; powershell -NoProfile -File .\RiftTask-source-preview\scripts\install.ps1 -Ref $Ref; if ($LASTEXITCODE -ne 0) { throw 'Source build/install failed' } }
+irm https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.ps1 | iex
 ```
 
+`irm` downloads the script and `iex` executes it. Only run this if you trust the repository and its current contents. It builds public `main` in an owned temporary directory, not a persistent source checkout. Native-command failures throw and stop installation without exiting your PowerShell session. Keep existing security controls enabled; if organizational policy blocks the command or downloaded scripts, stop and consult your administrator rather than bypassing it.
+
 Default: `%LOCALAPPDATA%\Programs\RiftTask`. `-Dest 'C:\absolute\new\path'` selects the exact final directory. No shared Desktop/Start Menu shortcuts are created by this preview. Open the resulting `RiftTask.exe` in Explorer to start your manual test; the bootstrap does not launch the app automatically.
+
+### Optional: download and inspect first
+
+Instead of piping directly into a shell, download in a **new empty directory**, inspect the file, and only then run it if trusted. These commands still use moving `main`; inspection is not signature verification.
+
+macOS/Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.sh -o install.sh
+less ./install.sh
+# After inspection, run separately:
+bash ./install.sh
+```
+
+Windows (only where existing policy permits downloaded local scripts):
+
+```powershell
+Invoke-RestMethod https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.ps1 -OutFile install.ps1 -ErrorAction Stop
+Get-Content .\install.ps1
+# After inspection, run separately:
+& .\install.ps1
+```
+
+For a tools/destination check without installation, run the inspected file with `bash ./install.sh --check` or `& .\install.ps1 -Check`. To select a genuinely new destination, use `bash ./install.sh --dest '/absolute/new/RiftTask.app'` (macOS) or `& .\install.ps1 -Dest 'C:\absolute\new\RiftTask'` (Windows).
+
+### Advanced: build a reviewed commit
+
+Optional, not required for quick setup. Supply a reviewed **full lowercase 40-character commit SHA** in place of the placeholder. In a new empty directory these recipes fetch the bootstrap from that revision and build that same source revision; unavailable or invalid pins fail closed. This is reproducible source selection, **not signed release provenance**. Inspect the downloaded script before executing it if you have not already reviewed that revision.
+
+macOS/Linux:
+
+```sh
+ref='<reviewed full lowercase 40-character commit SHA>'
+curl -fsSL "https://raw.githubusercontent.com/wisedev-pstach/RiftTask/$ref/scripts/install.sh" -o install.sh
+# After a successful download and inspection:
+bash ./install.sh --ref "$ref"
+```
+
+Windows:
+
+```powershell
+$Ref = '<reviewed full lowercase 40-character commit SHA>'
+Invoke-RestMethod "https://raw.githubusercontent.com/wisedev-pstach/RiftTask/$Ref/scripts/install.ps1" -OutFile install.ps1 -ErrorAction Stop
+# After a successful download and inspection, where existing policy permits:
+& .\install.ps1 -Ref $Ref
+```
+
+The installer fetches, detaches, verifies and prints the exact source commit before running npm. Keep that SHA for reports. The simple quick-start commands intentionally track moving `main` instead.
 
 ### Preservation and limits
 

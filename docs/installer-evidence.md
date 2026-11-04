@@ -1,4 +1,37 @@
-# Public-source installer update — 4 November 2026
+# Simple public quick-start — 4 November 2026
+
+## Current entrypoints
+
+README quick setup now uses `bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.sh | bash'` on macOS/Linux and `irm https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.ps1 | iex` on Windows. These execute trusted downloaded code from moving public `main`; they are not signed/pinned releases. Download/inspect recipes and advanced full-SHA bootstrap/source pins are separate optional sections. No persistent source checkout is required for quick setup.
+
+The existing Bash installer already works from stdin without script-relative resources; no Bash production changes were needed. PowerShell replaces host-terminating `exit` with scoped `return` or terminating `throw`, scopes preferences/helper functions, and uses path-independent help so downloaded evaluation does not need a script filename. File-based `-Check`, `-Dest`, and `-Ref` remain available. Its native exit checks, literal paths, owned-temp cleanup, architecture matching and existing-destination refusal are unchanged. Neither installer requires/installs/invokes `gh`; the app still uses official `gh` unchanged. No app/UI/auth/cloud code changed, no real user-data access or `.local` cleanup occurred, and no policy/security bypass was added.
+
+## Actual test-first RED → GREEN
+
+Targeted command pattern: `node --test --test-name-pattern='<pattern>' tests/install-scripts.test.cjs`.
+
+| Slice | Observed RED before implementation | Observed GREEN |
+| --- | --- | --- |
+| `README quick curl` | 0 passed / 2 failed: simple documented streaming recipe absent | 2 passed: exact README recipe streams the real installer into Bash with gh absent, simulated macOS ARM64 packaging, owned-temp cleanup and repeat-install refusal; failed curl returns 22 without installer commands/build or HOME/temp effects |
+| `PowerShell downloaded` | 0 passed / 1 failed: host-terminating `exit` remained | 1 passed: source contract for scoped preferences, return/throw, filename-independent help and exact Windows README recipe; **not runtime proof** |
+| `README separates` | 0 passed / 1 failed: optional inspection section absent | 1 passed: inspection and advanced pins distinct, both platforms retain parameterized pin recipes, obsolete persistent-checkout instruction absent |
+
+The curl executable fixture streams the actual current `scripts/install.sh` file, not a fabricated installer response. Build/npm/packaging remain controlled executable fixtures, not native builds. Existing real-local-Git main-selection and older-commit SHA-pin tests remain separate and passed. A failed empty download is tested; piping downloaded code is not an atomic verified download and cannot promise that no prefix runs after a partially transferred response. Public network reads, if performed by the parent, are separate from fixture execution.
+
+## Real verification on this host
+
+- `node --test tests/install-scripts.test.cjs`: **29 tests; 28 passed, 0 failed, 1 skipped**. Log: `/opt/data/cache/scratch/rifttask-simple-focused.log`.
+- `npm test`: exit **0**; **157 core/integration tests: 156 passed, 0 failed, 1 skipped; 42 UI tests passed in 4 files**. Log: `/opt/data/cache/scratch/rifttask-simple-npm-test.log`.
+- `npm run build`: exit **0**; Vite **8.3.5**, **21 modules**. Existing >500 kB chunk warning remains (582.34 kB JS). Log: `/opt/data/cache/scratch/rifttask-simple-build.log`.
+- `git diff --check`: exit **0**. Bash syntax/help remain covered by the focused suite.
+
+PowerShell is unavailable; parser/runtime and actual Windows IEX behavior were **not** executed. Native macOS/Windows dependency build/install/launch and packaged PTY remain owner acceptance checks. Simulated macOS execution is not native macOS proof. This work is on `fix/simple-install-entrypoints`, with no commit/push/merge/publication; the public-main download URLs do not contain these unpublished changes yet.
+
+---
+
+# Historical public-source installer update — 4 November 2026
+
+The following earlier verification and persistent-checkout README handoff are superseded by the simple-entrypoint update above. Its safety evidence remains relevant.
 
 ## Current behavior
 

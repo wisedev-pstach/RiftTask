@@ -39,6 +39,8 @@ param(
     [switch]$Help
 )
 
+# Keep preferences and helper functions local when evaluated via irm | iex.
+& {
 $ErrorActionPreference = 'Stop'
 if ($Ref -and $Ref -cnotmatch '^[0-9a-f]{40}$') { throw '-Ref requires a full lowercase 40-character commit SHA.' }
 
@@ -52,8 +54,8 @@ function Invoke-Native {
 }
 
 if ($Help) {
-    Get-Help $MyInvocation.MyCommand.Path -Detailed
-    exit 0
+    Write-Output 'Usage: install.ps1 [-Check] [-DryRun] [-Source] [-Dest <new directory>] [-Ref <full lowercase SHA>] [-Help]'
+    return
 }
 
 $Repo = "https://github.com/wisedev-pstach/RiftTask.git"
@@ -103,8 +105,7 @@ if ($NodeCmd -and $NpmCmd) {
 }
 
 if ($Errors -gt 0) {
-    Write-Error "Installation aborted due to missing prerequisites."
-    exit 1
+    throw "Installation aborted due to missing prerequisites."
 }
 
 $TargetDir = if ($Dest) { $Dest } else { Join-Path $env:LOCALAPPDATA "Programs\$AppName" }
@@ -116,7 +117,7 @@ if (Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue) {
 
 if ($CheckOnly) {
     Write-Host "Tools/destination check passed. Compilation and native launch remain unverified." -ForegroundColor Green
-    exit 0
+    return
 }
 
 # Always clone an explicit main branch; never build in the user's checkout.
@@ -150,8 +151,7 @@ try {
     $BundlePath = if ($Arch -eq 'arm64') { 'release\win-arm64-unpacked' } else { 'release\win-unpacked' }
     $WinBundle = Join-Path $BuildDir $BundlePath
     if (-not (Test-Path -LiteralPath (Join-Path $WinBundle "$AppName.exe") -PathType Leaf)) {
-        Write-Error "Windows unpacked directory was not found after packaging."
-        exit 1
+        throw "Windows unpacked directory was not found after packaging."
     }
 
     Write-Host "Installing to $TargetDir..." -ForegroundColor Cyan
@@ -179,3 +179,4 @@ finally {
         Remove-Item -LiteralPath $TempBuildDir -Recurse -Force -ErrorAction Continue
     }
 }
+} # End invocation scope; return/throw never exit the caller session.
