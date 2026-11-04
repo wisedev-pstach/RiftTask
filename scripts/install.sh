@@ -12,7 +12,8 @@ Usage: install.sh [OPTIONS]
 
 Source-build preview for RiftTask (macOS and Linux), main.
 Requires git, Node 24.15+ (24.x) or 26+, npm/npx,
-Python 3 and platform C/C++ build tools. Native installation is not verified.
+macOS uses shipped node-pty prebuilds; Linux needs Python 3 and C/C++ tools.
+Native installation is not verified.
 
 Options:
   --check        Inspect environment and prerequisites without installing
@@ -113,15 +114,6 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-if [[ "$OS" == "mac" ]]; then
-  if xcode-select -p >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then
-    echo "  macOS Build Tools: OK"
-  else
-    echo "  macOS Build Tools: WARNING - Xcode Command Line Tools recommended for native terminal compilation" >&2
-    echo "    Run 'xcode-select --install' if compilation fails." >&2
-  fi
-fi
-
 if [[ $ERRORS -gt 0 ]]; then
   echo "" >&2
   echo "Installation aborted due to missing prerequisites." >&2
@@ -148,7 +140,7 @@ if [[ "$OS" == "linux" ]]; then refuse_existing "$LAUNCHER_DIR/rifttask"; fi
 
 if [[ "$CHECK_ONLY" == "true" ]]; then
   echo ""
-  echo "Tools/destination check passed. Compilation and native launch remain unverified."
+  echo "Tools/destination check passed. Dependency/runtime verification and native launch remain unverified."
   exit 0
 fi
 
@@ -174,13 +166,18 @@ if [[ -n "$SOURCE_COMMIT" ]]; then
 fi
 
 echo "Building RiftTask from source..."
-npm ci --no-audit --no-fund
-npm run native:rebuild
+if [[ "$OS" == "mac" ]]; then
+  # Never run node-pty's compile fallback, even with build_from_source inherited.
+  npm ci --ignore-scripts --no-audit --no-fund
+else
+  npm ci --no-audit --no-fund
+fi
+npm run native:prepare -- "$ARCH"
 npm run build
 
 if [[ "$OS" == "mac" ]]; then
   echo "Packaging macOS application bundle..."
-  npx --no-install electron-builder --mac --"$ARCH" --dir --publish never
+  npx --no-install electron-builder --mac --"$ARCH" --dir --publish never --config.npmRebuild=false
 
   if [[ "$ARCH" == "arm64" ]]; then
     APP_BUNDLE="release/mac-arm64/$APP_NAME.app"

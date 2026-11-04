@@ -13,7 +13,8 @@
     "test:ui": "vitest run",
     "test": "npm run test:core && npm run test:ui",
     "start": "electron .",
-    "native:rebuild": "electron-builder install-app-deps",
+    "native:prepare": "node scripts/prepare-native.cjs",
+    "native:rebuild": "npm run native:prepare",
     "pack": "npm run build && electron-builder --dir",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never"
@@ -43,6 +44,7 @@
     "files": ["dist/**/*", "desktop/**/*", "package.json"],
     "asar": true,
     "npmRebuild": true,
+    "beforePack": "desktop/pty-before-pack.cjs",
     "afterPack": "desktop/pty-packaging.cjs",
     "asarUnpack": ["node_modules/node-pty/**/*"],
     "mac": {"target": [{"target": "zip", "arch": ["arm64", "x64"]}], "category": "public.app-category.productivity"},
