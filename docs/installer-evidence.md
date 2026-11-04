@@ -1,4 +1,42 @@
-# Source-build bootstrap safety evidence — 3 November 2026
+# Public-source installer update — 4 November 2026
+
+## Current behavior
+
+The owner made `wisedev-pstach/RiftTask` public (visibility verified by the parent). Both scripts now use normal anonymous HTTPS `git clone --depth=1 --branch main https://github.com/wisedev-pstach/RiftTask.git` into a fresh invocation-owned build tree. They neither discover, require, install nor invoke `gh`, and do not check authentication or add a credential helper. Optional full lowercase 40-character commit pins still fetch, detach, read back and verify HEAD before npm. Shared Git configuration and credentials are untouched.
+
+Official `gh` remains required separately for **app first-use identity and optional private cloud access**. The cloud planning-data target remains a separate initialized, user-owned private personal repository; public source is not a public task-data store. Runtime auth/cloud code and UI were not changed; appearance is unchanged.
+
+Existing-destination refusal, owned-tree-only cleanup, relative-TMPDIR rejection, literal hostile paths, architecture checks, quarantine/policy preservation and immediate native failure handling remain covered. No `.local` or real user-data cleanup was performed. Tests only remove their own scratch fixtures.
+
+## Actual vertical RED → GREEN
+
+Each slice was run RED before changing its corresponding implementation, then GREEN before moving to the next slice:
+
+| Slice / command pattern (`node --test --test-name-pattern='…' tests/install-scripts.test.cjs`) | Observed RED | Observed GREEN |
+| --- | --- | --- |
+| `public source check` | 0 passed / 1 failed: missing gh aborted prerequisites (exit 1) | 1 passed: both absent gh and a fail-fast gh trap, unavailable auth, no filesystem effects |
+| `public isolated source build` | 0 passed / 1 failed: source clone invoked missing gh (exit 127) | 1 passed with real local Git main/feature commits, main marker required, gh absent, no inherited auth; isolated build/install fixture succeeds |
+| PowerShell public-source clone/fetch native contracts | 0 passed / 3 failed: gh invocation remained, Git clone/fetch contracts missing | all 7 PowerShell source contracts passed; textual contracts only, not runtime proof |
+| `README one-command` | 0 passed / 1 failed: documented command invoked missing gh (exit 127) | 1 passed: exact documented Bash command uses real local Git, captures SHA, installs that exact revision without gh, refuses existing checkout before external commands |
+
+Fixture transport maps only the expected public HTTPS URL to a real local `file://` repository, with isolated Git configuration and file-only protocol. npm/build/packaging are controlled executable fixtures, **not an actual dependency build or native installer acceptance**. Default fixture `gh` is now a fail-fast trap (exit 97) before version/auth handling, so successful complete builds also prove it was never invoked. Existing clone/npm/rebuild/build/package failures, destination preservation, hostile paths, Node/architecture checks and older pinned-commit selection still pass. No network credentials or real application data are used.
+
+## Real verification on this host
+
+- `node --test tests/install-scripts.test.cjs`: **26 tests; 25 passed, 0 failed, 1 skipped** (pwsh absent).
+- `npm test`: exit **0**; **154 core/integration tests: 153 passed, 0 failed, 1 skipped; 42 UI passed in 4 files**. Full run log: `/opt/data/cache/scratch/rifttask-public-npm-test.log` (scratch, not a committed artifact).
+- Separate `npm run test:ui`: **42 passed in 4 files**, exit **0**.
+- `npm run build`: exit **0**, Vite **8.3.5**, **21 modules**; existing >500 kB chunk warning remains (582.34 kB JS output).
+- `bash -n scripts/install.sh` and `git diff --check`: exit **0**.
+
+Native macOS/Windows install/launch and packaged PTY remain owner checks. PowerShell is unavailable; its parser test skips honestly. No signed/prebuilt release, external writes, source commit/push/merge, auth changes or real cloud/user-data access were performed by this worker. Parent handles independent review and publication; README public-main commands depend on this update being published there.
+
+---
+
+# Historical source-build bootstrap safety evidence — 3 November 2026
+
+The remainder is historical evidence from the private feature-branch installer. Its gh/auth/feature-branch requirements and old counts are superseded by the public-source update above; the safety regressions and native acceptance limitations remain relevant.
+
 
 ## Delivered slice, not whole-product acceptance
 

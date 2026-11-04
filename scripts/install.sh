@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # RiftTask source-build preview for macOS and Linux (native acceptance pending)
-# Authenticated via official GitHub CLI (gh)
+# Anonymous public HTTPS source download; app first use separately requires official gh
 set -euo pipefail
 
-REPO="wisedev-pstach/RiftTask"
+REPO="https://github.com/wisedev-pstach/RiftTask.git"
 APP_NAME="RiftTask"
 
 usage() {
   cat <<EOF
 Usage: install.sh [OPTIONS]
 
-Source-build preview for RiftTask (macOS and Linux), feat/cloud-persistence.
-Requires authenticated official gh, git, Node 24.15+ (24.x) or 26+, npm/npx,
+Source-build preview for RiftTask (macOS and Linux), main.
+Requires git, Node 24.15+ (24.x) or 26+, npm/npx,
 Python 3 and platform C/C++ build tools. Native installation is not verified.
 
 Options:
@@ -19,7 +19,7 @@ Options:
   --dry-run      Alias for --check
   --source       Compatibility flag; this preview always builds fresh source
   --dest <dir>   Exact NEW app directory (macOS: must end in .app)
-  --ref <sha>    Build exactly this full 40-character commit from the private repo
+  --ref <sha>    Build exactly this full 40-character commit from the public repo
   --help, -h     Show this help message
 EOF
 }
@@ -81,33 +81,12 @@ case "$RAW_ARCH" in
     ;;
 esac
 
-# Discover gh CLI in standard locations if not already in PATH
-if ! command -v gh >/dev/null 2>&1 && [[ "${RIFTTASK_SKIP_CANDIDATE_SEARCH:-0}" != "1" ]]; then
-  HOME_DIR="${HOME:-}"
-  for candidate in /opt/homebrew/bin/gh /usr/local/bin/gh /opt/data/bin/gh "${HOME_DIR}/bin/gh" "${HOME_DIR}/.local/bin/gh"; do
-    if [[ -n "$candidate" && -x "$candidate" ]]; then
-      export PATH="$(dirname "$candidate"):$PATH"
-      break
-    fi
-  done
-fi
-
 # Prerequisite checks
 ERRORS=0
 
 echo "Checking environment for RiftTask installation..."
 echo "  OS: $OS ($RAW_OS)"
 echo "  Arch: $ARCH ($RAW_ARCH)"
-
-if command -v gh >/dev/null 2>&1; then
-  GH_VER="$(gh --version | head -n1)"
-  echo "  GitHub CLI (gh): OK ($GH_VER)"
-else
-  echo "  GitHub CLI (gh): NOT FOUND" >&2
-  echo "    Error: GitHub CLI (gh) not found in PATH." >&2
-  echo "    Please install gh (e.g. 'brew install gh' on macOS) and run 'gh auth login'." >&2
-  ERRORS=$((ERRORS + 1))
-fi
 
 if command -v git >/dev/null 2>&1; then
   GIT_VER="$(git --version)"
@@ -149,15 +128,6 @@ if [[ $ERRORS -gt 0 ]]; then
   exit 1
 fi
 
-# Check GitHub authentication
-if gh auth status >/dev/null 2>&1; then
-  echo "  GitHub Authentication: OK"
-else
-  echo "  GitHub Authentication: NOT AUTHENTICATED" >&2
-  echo "    Please run 'gh auth login' to authenticate with your GitHub account." >&2
-  exit 1
-fi
-
 # --dest is the exact new app directory (a .app bundle on macOS).
 if [[ "$OS" == "mac" ]]; then
   TARGET_DIR="${CUSTOM_DEST:-$HOME/Applications/$APP_NAME.app}"
@@ -178,11 +148,11 @@ if [[ "$OS" == "linux" ]]; then refuse_existing "$LAUNCHER_DIR/rifttask"; fi
 
 if [[ "$CHECK_ONLY" == "true" ]]; then
   echo ""
-  echo "Tools/authentication/destination check passed. Compilation and native launch remain unverified."
+  echo "Tools/destination check passed. Compilation and native launch remain unverified."
   exit 0
 fi
 
-# Always build an isolated fresh copy of the explicit feature ref. Never run
+# Always build an isolated fresh copy of the explicit main branch. Never run
 # npm in a user's checkout or reuse its possibly stale release output.
 [[ "${TMPDIR:-/tmp}" == /* ]] || { echo 'Error: TMPDIR must be an absolute directory path; set it to an existing absolute directory or unset TMPDIR.' >&2; exit 1; }
 TEMP_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rifttask-install-XXXXXX")"
@@ -192,14 +162,12 @@ cleanup() {
 }
 trap cleanup EXIT
 BUILD_DIR="$TEMP_BUILD_DIR/source"
-echo "Cloning $REPO at feat/cloud-persistence..."
-gh repo clone "$REPO" "$BUILD_DIR" -- --depth=1 --branch feat/cloud-persistence
+echo "Cloning $REPO at main..."
+git clone --depth=1 --branch main "$REPO" "$BUILD_DIR"
 
 cd "$BUILD_DIR"
 if [[ -n "$SOURCE_COMMIT" ]]; then
-  # Per-command official gh credential helper; do not alter shared Git config
-  # or put a token in argv, URLs, output or the working tree.
-  git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch --depth=1 origin "$SOURCE_COMMIT"
+  git fetch --depth=1 origin "$SOURCE_COMMIT"
   git checkout --detach "$SOURCE_COMMIT"
   [[ "$(git rev-parse HEAD)" == "$SOURCE_COMMIT" ]] || { echo 'Error: source commit mismatch; stopped.' >&2; exit 1; }
   echo "Building exact source commit: $SOURCE_COMMIT"

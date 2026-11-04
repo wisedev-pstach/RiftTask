@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
     Source-build preview for RiftTask on Windows (PowerShell 5.1+ / PowerShell Core).
-    Authenticated via official GitHub CLI (gh).
+    Anonymous public HTTPS source download; app first use separately requires official gh.
 
 .DESCRIPTION
-    Checks prerequisites (gh, git, node, npm), verifies authentication,
-    clones fresh feat/cloud-persistence, compiles native dependencies (node-pty),
+    Checks build prerequisites (git, node, npm),
+    clones public main over HTTPS into a fresh tree, compiles native dependencies (node-pty),
     packages RiftTask and installs it to %LOCALAPPDATA%\Programs\RiftTask,
     refusing all existing destinations. No shared shortcuts or upgrades.
     Requires Node 24.15+ (24.x) or 26+, Python 3 and MSVC C++ build tools.
@@ -56,7 +56,7 @@ if ($Help) {
     exit 0
 }
 
-$Repo = "wisedev-pstach/RiftTask"
+$Repo = "https://github.com/wisedev-pstach/RiftTask.git"
 $AppName = "RiftTask"
 $CheckOnly = $Check.IsPresent -or $DryRun.IsPresent
 
@@ -73,17 +73,6 @@ Write-Host "  OS: Windows ($([System.Environment]::OSVersion.VersionString))"
 Write-Host "  Arch: $Arch"
 
 $Errors = 0
-
-# Check GitHub CLI
-$GhCmd = Get-Command gh -ErrorAction SilentlyContinue
-if ($GhCmd) {
-    $GhVer = (Invoke-Native gh @('--version'))
-    Write-Host "  GitHub CLI (gh): OK ($GhVer)" -ForegroundColor Green
-} else {
-    Write-Warning "  GitHub CLI (gh): NOT FOUND in PATH."
-    Write-Host "    Install gh from https://cli.github.com/ or 'winget install --id GitHub.cli' and run 'gh auth login'." -ForegroundColor Yellow
-    $Errors++
-}
 
 # Check Git
 $GitCmd = Get-Command git -ErrorAction SilentlyContinue
@@ -118,15 +107,6 @@ if ($Errors -gt 0) {
     exit 1
 }
 
-# Check GitHub Authentication
-try {
-    Invoke-Native gh @('auth', 'status') *>$null
-    Write-Host "  GitHub Authentication: OK" -ForegroundColor Green
-} catch {
-    Write-Warning "GitHub authentication failed. Run gh auth login on your own computer."
-    exit 1
-}
-
 $TargetDir = if ($Dest) { $Dest } else { Join-Path $env:LOCALAPPDATA "Programs\$AppName" }
 $TargetDir = [System.IO.Path]::GetFullPath($TargetDir)
 # Get-Item -Force also detects reparse points; use literal paths throughout.
@@ -135,12 +115,12 @@ if (Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue) {
 }
 
 if ($CheckOnly) {
-    Write-Host "Tools/authentication/destination check passed. Compilation and native launch remain unverified." -ForegroundColor Green
+    Write-Host "Tools/destination check passed. Compilation and native launch remain unverified." -ForegroundColor Green
     exit 0
 }
 
-# Always clone an explicit feature ref; never build in the user's checkout.
-$SourceRef = 'feat/cloud-persistence'
+# Always clone an explicit main branch; never build in the user's checkout.
+$SourceRef = 'main'
 $TempBuildDir = Join-Path ([System.IO.Path]::GetTempPath()) ("rifttask-build-" + [System.Guid]::NewGuid().ToString('N'))
 $BuildDir = Join-Path $TempBuildDir 'source'
 $OwnedTemp = $false
@@ -148,12 +128,11 @@ $PushedLocation = $false
 try {
     New-Item -ItemType Directory -Path $TempBuildDir -ErrorAction Stop | Out-Null
     $OwnedTemp = $true
-    Invoke-Native gh @('repo', 'clone', $Repo, $BuildDir, '--', '--depth=1', '--branch', $SourceRef)
+    Invoke-Native git @('clone', '--depth=1', '--branch', $SourceRef, $Repo, $BuildDir)
     Push-Location -LiteralPath $BuildDir
     $PushedLocation = $true
     if ($Ref) {
-        # Scoped official gh helper, not a shared credential/config change.
-        Invoke-Native git @('-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential', 'fetch', '--depth=1', 'origin', $Ref)
+        Invoke-Native git @('fetch', '--depth=1', 'origin', $Ref)
         Invoke-Native git @('checkout', '--detach', $Ref)
         $ActualCommit = (Invoke-Native git @('rev-parse', 'HEAD')).Trim()
         if ($ActualCommit -cne $Ref) { throw 'Source commit mismatch; stopped.' }

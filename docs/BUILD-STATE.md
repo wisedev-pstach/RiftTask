@@ -1,5 +1,15 @@
 # RiftTask — build state
 
+## Current: 4 November — public-source installer update
+- Owner made the source repository public; the parent verified visibility. Both bootstraps now anonymously clone public HTTPS `main` with Git. No gh discovery/prerequisite/authentication/custom credential helper; exact optional commit fetch/detached checkout/HEAD verification is retained. Fresh isolated builds and existing-destination/data/hostile-path/TMPDIR/native-failure protections are unchanged.
+- README Mac/Linux and Windows recipes use normal HTTPS Git, capture the cloned full SHA and pass it to the installer. Official gh is **still a separate app first-use identity/private-cloud prerequisite**. Planning data still belongs in a separate user-owned private initialized personal repository; no app auth/cloud behavior changed.
+- Strict observed RED/GREEN: missing-gh check (exit 1 → pass), complete source-build fixture (missing gh exit 127 → pass), PowerShell public clone/fetch source contracts (3 fail → pass), exact README Bash recipe with real local Git (missing gh exit 127 → pass). Fixtures include absent gh and fail-fast gh traps; no inherited auth. Details: `docs/installer-evidence.md`.
+- Actual execution: installer **25 passed / 1 pwsh skip**, full `npm test` **153 core/integration passed / 1 skip + 42 UI passed**, separate UI **42 passed**, production build/Bash syntax/whitespace **passed**. Existing >500 kB bundle warning remains. PowerShell runtime/parser and native Mac/Windows install/launch are not verified.
+- No UI change; appearance unchanged. No `.local`/user-data cleanup, source commit/push/merge, auth changes, cloud calls or release by this worker. Parent owns review/publication; these commands take effect remotely only after the update is published to public main.
+
+
+## Historical record (entries below predate the public-source installer update)
+
 ## 4 November — MVP implementation handoff
 - Completed sign-in initiation, recovery of double-corrupt persistence from exported backup without deleting originals, and revision-pinned authenticated one-command source setup. Existing tasks/milestones/repo/PTY/manual-cloud scope is unchanged; no added features.
 - Independent final security/correctness review passed with no blockers (55 targeted passed, 1 PowerShell skip). Parent fresh full run on 4 November: **153 core/integration passed, 1 skipped; 42 UI passed**, production build and whitespace passed. Detailed evidence: `docs/functional-completion-evidence.md`.
@@ -66,17 +76,17 @@
 - Parent reproduced and fixed the renamed-project identity gap, policy-validation/local-edit race, corrupt configuration truthiness, and stale initial UI status. Latest full verification: **98 core/integration + 32 React tests PASS**, production build and whitespace PASS. Independent re-review passed with no security concerns or logic errors (22 targeted cloud tests passed). Resolving every linked GitHub project may block cloud for inaccessible repository identities. Conflict resolution is stop-only. Initialized README-only target required; ambiguous 404 never initializes cloud. Explicitly authorized synthetic remote smoke and native-platform execution remain gates before broad acceptance.
 
 ## Mission
-Create a private desktop task app for wisedev. Categories → projects → manually maintained tasks. GitHub sign-in; persistent data per account; repository links for GitHub and Azure DevOps; terminal integration; Windows/macOS installation in one command. No provider issue/task imports. No questions; choose sensible defaults. Work incrementally across two days, occasional progress to Discord DM 1562209904591372359. Never publish publicly, use paid services, modify other repos, revoke existing authentication, or expose credentials.
+Create a private desktop task app for wisedev. Categories → projects → manually maintained tasks. GitHub sign-in; persistent data per account; repository links for GitHub and Azure DevOps; terminal integration; Windows/macOS installation in one command. No provider issue/task imports. No questions; choose sensible defaults. Work incrementally across two days, occasional progress to Discord DM 1562209904591372359. The owner has since made the source public; the former private-source restriction is superseded. Never use paid services, modify other repos, revoke existing authentication, or expose credentials.
 
 ## Environment
-- Repository: https://github.com/wisedev-pstach/RiftTask (private; created and read back).
+- Repository: https://github.com/wisedev-pstach/RiftTask (now public per owner/parent verification; earlier entries describe historical private state).
 - Local: /opt/data/projects/RiftTask, git main.
 - GitHub CLI: /opt/data/bin/gh, authenticated wisedev-pstach; token has repo/read:org/gist, NOT workflow scope. Existing credential file owner-only must stay private. Never print tokens.
 - Dependencies installed; initial backend/UI agents completed. Current continuation status and evidence are recorded below.
 - Persistent disk started with 18 GB free. Check before building; never accumulate installer/build caches unchecked.
 
 ## Architecture
-Read AGENTS.md for exact bridge/schema and test discipline. Electron/React/Vite. Local JSON persistence isolated by verified numeric GitHub ID with atomic writes/backups. Sign-in through official installed gh CLI avoids registering/borrowing an OAuth application. Account data persists on this device; no cloud sync yet. Explain this honestly. Private repository installation must use authenticated downloads, NOT public raw URLs.
+Read AGENTS.md for exact bridge/schema and test discipline. Electron/React/Vite. Local JSON persistence isolated by verified numeric GitHub ID with atomic writes/backups. Sign-in through official installed gh CLI avoids registering/borrowing an OAuth application. Account data persists locally, with optional consented manual private-repository cloud sync as described above. Source installation now uses anonymous public HTTPS Git from main; official gh is needed for app identity/private cloud, not installation.
 
 ## Latest user priorities — authoritative over older baseline
 - PROJECT-FIRST TASK NAVIGATION: category overview shows project TILES, each with live In progress and To do counts. To do means backlog (not done, not in progress); include zero counts explicitly. Opening a tile enters only that project's task view and feature tabs. Global mixed-project task list is not the default task surface; optional cross-project Today can remain secondary. Count from actual account-scoped persisted tasks and exclude archived projects from normal overview. Implemented in this continuation: default/category tiles, scoped task surfaces, Tasks/Project details tabs and live counts; see current status below.
