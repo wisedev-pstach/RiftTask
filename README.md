@@ -4,27 +4,23 @@ A desktop workspace for the projects you work on after work.
 
 Organize **categories → projects → your own tasks**. Keep the next action visible without importing a second backlog from GitHub or Azure DevOps.
 
-> **Ready for your first MVP test.** Installation currently builds the app from source; there is no prebuilt/signed download. The commands below use the published `feat/cloud-persistence` branch, not `main`. Mac/Windows manual testing is yours; automated evidence and known limits are linked at the end.
+> **Ready for your first MVP test.** Installation currently builds the app from source; there is no prebuilt/signed download. The commands below download the public `main` branch over HTTPS; no GitHub CLI or authentication is needed to download/build/install. Mac/Windows manual testing is yours; automated evidence and known limits are linked at the end.
 
 ## Start using RiftTask
 
 ### 1. Install the prerequisites on your computer
 
-- **Both platforms:** Git, the official [GitHub CLI](https://cli.github.com/), **Node 24.15+ within 24.x or Node 26+**, and npm/npx. Your GitHub account must have access to this private repository. No paid GitHub plan or separate RiftTask server is required for the described setup, subject to GitHub's normal limits.
+- **Both platforms (installation):** Git, **Node 24.15+ within 24.x or Node 26+**, and npm/npx. No paid GitHub plan or separate RiftTask server is required for the described setup, subject to GitHub's normal limits.
 - **Mac:** Python 3 and Xcode Command Line Tools, needed to build the embedded terminal. Use tools matching your Mac's Apple Silicon/Intel architecture.
 - **Windows:** Python 3 and Visual Studio Build Tools with **Desktop development with C++** and the Windows SDK. Use matching ARM64/x64 Node and build tools. Run in a normal PowerShell session whose existing policy permits local scripts; do not bypass policy.
 
 You do not need to install Electron separately. The setup downloads project dependencies and builds the native terminal module, so it needs internet access and free build space.
 
-### 2. Authenticate GitHub CLI before downloading this private app
+### 2. Separate installation from app sign-in
 
-If `gh auth status --hostname github.com` already shows your intended account, keep that login. Otherwise run:
+The source repository is **public**. Downloading, building and installing do **not** require `gh`, a GitHub login or repository access permission. The scripts do not install `gh`, log in, or change shared Git credential configuration.
 
-```sh
-gh auth login --hostname github.com --git-protocol https --web
-```
-
-Finish its browser prompts. This step is needed to download the **private source repository**, even though RiftTask can also initiate sign-in after the app is installed.
+**Before first use of the app**, install the official [GitHub CLI](https://cli.github.com/) on your computer. RiftTask still requires it for verified GitHub identity and optional private cloud access. If it is already signed into your intended account, keep that login; otherwise the app can initiate sign-in after installation. Public source does not make your planning data public or remove the app's identity requirement.
 
 ### 3. Run the setup command for your OS
 
@@ -66,7 +62,7 @@ Private Git history is **not end-to-end encrypted**. Anyone with repository read
 
 - Use **Export backup** to keep a separate JSON copy. **Import backup** replaces the active workspace only after confirmation. It is also available if loading fails; damaged originals are preserved in recovery archives before restore. Keep your exported file and archives.
 - **Existing source/app destination:** setup deliberately refuses to overwrite it. Do not delete your app data or old app to force installation. Use a new checkout name and an explicitly new app destination (`--dest` / `-Dest`); see the setup details below. Automatic upgrades are not included.
-- **Missing gh / wrong GitHub account:** check `gh auth status --hostname github.com` in your own terminal before retrying. Do not paste credentials into chat or the app.
+- **App sign-in: missing gh / wrong GitHub account:** install the official CLI and check `gh auth status --hostname github.com` in your own terminal before retrying. Do not paste credentials into chat or the app.
 - **Native compilation failure:** check Python/C++ prerequisites, supported Node version and architecture. Keep the error and printed source revision for a bug report; do not blanket-enable dependency scripts or weaken OS security controls.
 - **Unsigned-app or script-policy warning:** keep platform protections enabled and report the exact message. There is no signed/notarized release claimed here.
 - **New app folder, old tasks still visible:** app installation location and application-data location are separate. Use a fresh OS test account for isolated dummy tests; a new clone alone is not a new data profile.
@@ -79,7 +75,7 @@ Private Git history is **not end-to-end encrypted**. Anyone with repository read
 - Account-scoped local persistence, atomic writes and recoverable backups.
 - Project-first tiles/counts, milestone labels/task assignments and milestone completion view.
 - GitHub / Azure DevOps repository links, local Git context, and an explicitly started bottom-docked terminal retaining per-project sessions. No automatic provider issue/task importing or project command execution.
-- Authenticated one-command Windows/macOS **source-build bootstrap** from this private repository; native packages/install/launch still require the owner's platform checks.
+- Anonymous HTTPS Windows/macOS **source-build bootstrap** from this public repository; native packages/install/launch still require the owner's platform checks.
 
 ## Data and authentication
 
@@ -99,7 +95,7 @@ Use Node.js 24.15+ (24.x LTS) or 26+ and npm. Install the official [GitHub CLI](
 gh auth login --hostname github.com --git-protocol https --web
 ```
 
-Then, from this private repository:
+Then, from a checkout of this public repository:
 
 ```sh
 npm ci
@@ -117,20 +113,20 @@ These scripts are a **source-build preview**, not verified native installers or 
 
 Prerequisites on **your own computer**:
 
-- Official GitHub CLI in `PATH`, authenticated for this private repository (`gh auth status --hostname github.com`), and Git.
+- Git in `PATH`. No `gh` or authentication is required for installation; the official CLI is a separate **app first-use identity** prerequisite.
 - **Node 24.15+ within 24.x (recommended), or Node 26+**, with npm/npx. This conservative bootstrap baseline satisfies the current installed Vite (`^20.19.0 || >=22.12.0`), Vitest (`^22.12.0 || ^24.0.0 || >=26.0.0`) and jsdom (`^22.22.2 || ^24.15.0 || >=26.0.0`) engines. Node 20 alone is insufficient. Dependency/lockfile updates may change these requirements.
 - Native `node-pty` compilation: Python 3 and a C/C++ toolchain. macOS: Xcode Command Line Tools. Windows: Visual Studio Build Tools with Desktop development with C++ and a suitable Windows SDK. Linux: `make`, a C/C++ compiler, Python 3, and Electron's desktop runtime libraries/display. Use a Node/toolchain architecture matching the intended app.
-- Network access for the private source, npm dependencies and Electron/build tooling; adequate build disk space. This is not an offline or dependency-free installer. Unset production-only npm settings so development/build dependencies are installed.
+- Network access for the public source, npm dependencies and Electron/build tooling; adequate build disk space. This is not an offline or dependency-free installer. Unset production-only npm settings so development/build dependencies are installed.
 
 ### Install on macOS or Linux
 
 Run this **one shell command** from a directory where `RiftTask-source-preview` does **not** already exist:
 
 ```sh
-test ! -e RiftTask-source-preview && test ! -L RiftTask-source-preview && gh repo clone wisedev-pstach/RiftTask RiftTask-source-preview -- --depth=1 --branch feat/cloud-persistence && ref="$(git -C RiftTask-source-preview rev-parse HEAD)" && bash RiftTask-source-preview/scripts/install.sh --ref "$ref"
+test ! -e RiftTask-source-preview && test ! -L RiftTask-source-preview && git clone --depth=1 --branch main https://github.com/wisedev-pstach/RiftTask.git RiftTask-source-preview && ref="$(git -C RiftTask-source-preview rev-parse HEAD)" && bash RiftTask-source-preview/scripts/install.sh --ref "$ref"
 ```
 
-The initial authenticated clone selects the **moving feature branch**, then captures its full commit SHA. `--ref` fetches, checks out detached, verifies and prints that exact commit in a separate fresh build tree; a branch advance during the build cannot silently change the built revision. Keep the printed SHA for reporting. This is reproducible source selection, **not signed release provenance**. The MVP implementation was published at `af0e5982660baa42601f8bf19901bc7ffd6dd9a4`; use the latest feature head for current instructions and fixes. Do not substitute default `main`: it may lack the current feature/bootstrap. For a supplied reviewed full SHA use `--ref '<40-character lowercase SHA>'` / `-Ref '<SHA>'`; unsupported or unavailable refs fail closed.
+The initial anonymous HTTPS clone explicitly selects the **moving `main` branch**, then captures its full commit SHA. `--ref` fetches, checks out detached, verifies and prints that exact commit in a separate fresh build tree; a branch advance during the build cannot silently change the built revision. Keep the printed SHA for reporting. This is reproducible source selection, **not signed release provenance**. Running the script without `--ref` / `-Ref` builds the current `main` tip. For a supplied reviewed full SHA use `--ref '<40-character lowercase SHA>'` / `-Ref '<SHA>'`; unsupported or unavailable refs fail closed.
 
 Defaults: macOS `~/Applications/RiftTask.app`; Linux `~/.local/share/rifttask` with launcher `~/.local/bin/rifttask` (add that directory to your `PATH` yourself if needed). `--dest '/absolute/new/path'` means the **exact final application directory**, not a parent; on macOS it must end in `.app`.
 
@@ -139,7 +135,7 @@ Defaults: macOS `~/Applications/RiftTask.app`; Linux `~/.local/share/rifttask` w
 Use a normal PowerShell session whose existing policy permits local scripts. This is **one PowerShell command** (the `& { ... }` block); every native failure stops the handoff:
 
 ```powershell
-& { $ErrorActionPreference = 'Stop'; if (Get-Item -LiteralPath RiftTask-source-preview -Force -ErrorAction SilentlyContinue) { throw 'Source destination exists; choose a new directory' }; gh repo clone wisedev-pstach/RiftTask RiftTask-source-preview -- --depth=1 --branch feat/cloud-persistence; if ($LASTEXITCODE -ne 0) { throw 'Source clone failed' }; $Ref = git -C RiftTask-source-preview rev-parse HEAD; if ($LASTEXITCODE -ne 0) { throw 'Source revision failed' }; powershell -NoProfile -File .\RiftTask-source-preview\scripts\install.ps1 -Ref $Ref; if ($LASTEXITCODE -ne 0) { throw 'Source build/install failed' } }
+& { $ErrorActionPreference = 'Stop'; if (Get-Item -LiteralPath RiftTask-source-preview -Force -ErrorAction SilentlyContinue) { throw 'Source destination exists; choose a new directory' }; git clone --depth=1 --branch main https://github.com/wisedev-pstach/RiftTask.git RiftTask-source-preview; if ($LASTEXITCODE -ne 0) { throw 'Source clone failed' }; $Ref = git -C RiftTask-source-preview rev-parse HEAD; if ($LASTEXITCODE -ne 0) { throw 'Source revision failed' }; powershell -NoProfile -File .\RiftTask-source-preview\scripts\install.ps1 -Ref $Ref; if ($LASTEXITCODE -ne 0) { throw 'Source build/install failed' } }
 ```
 
 Default: `%LOCALAPPDATA%\Programs\RiftTask`. `-Dest 'C:\absolute\new\path'` selects the exact final directory. No shared Desktop/Start Menu shortcuts are created by this preview. Open the resulting `RiftTask.exe` in Explorer to start your manual test; the bootstrap does not launch the app automatically.
@@ -149,7 +145,7 @@ Default: `%LOCALAPPDATA%\Programs\RiftTask`. `-Dest 'C:\absolute\new\path'` sele
 - **Every existing final destination is refused**, including an empty directory, file, symlink/reparse point or existing app. On Linux an existing `~/.local/bin/rifttask` is also refused. No automatic uninstall, replacement or upgrade; choose a genuinely new destination. Do not remove your old install/data just to satisfy the script.
 - No application-data migration/deletion, credential changes, quarantine stripping or security bypass. Existing data remains in Electron's normal account-scoped application-data location; a new app directory is not a separate data profile.
 - Build/clone failures stop before destination creation. A failed copy or interruption can leave a **new, partial destination** (and possibly a new launcher); it is not automatically deleted. Inspect it manually before choosing another path. Only the invocation's owned temporary build tree is cleaned up.
-- `--check` / `--dry-run` and `-Check` / `-DryRun` do not clone, build, create directories/shortcuts, log in or alter app data. They fail on missing tools, unsupported Node/architecture, failed CLI authentication or an existing destination. They inspect tools/authentication, **not full compiler availability, private-repository access, dependency downloads, signing or successful native launch**.
+- `--check` / `--dry-run` and `-Check` / `-DryRun` do not clone, build, create directories/shortcuts, log in or alter app data. They fail on missing build tools (Git/Node/npm), unsupported Node/architecture or an existing destination—not missing `gh` or unavailable authentication. They inspect tools/destination, **not full compiler availability, network/source access, dependency downloads, app sign-in, signing or successful native launch**.
 - Current evidence: [installer evidence](docs/installer-evidence.md). Linux executable-fixture tests and simulated macOS path selection are **not** native macOS/Windows installation proof. PowerShell runtime was unavailable on the verification host; source-contract checks are not runtime evidence.
 
 ## Verification
@@ -158,4 +154,4 @@ Core tests: `npm run test:core` (Node's built-in runner). Renderer tests: `npm r
 
 Native Windows/macOS behavior is only considered verified after execution on those operating systems; Linux unit/build success is not evidence that their installers work.
 
-The owner performs native macOS/Windows testing using the published private branch. No prebuilt release, signing/notarization, security bypass or native-platform success is implied by the source commands or browser screenshots. Implementation/test details: [functional evidence](docs/functional-completion-evidence.md), [final scope](docs/FINAL-SCOPE.md), [build state](docs/BUILD-STATE.md).
+The owner performs native macOS/Windows testing using public `main`. No prebuilt release, signing/notarization, security bypass or native-platform success is implied by the source commands or browser screenshots. Implementation/test details: [functional evidence](docs/functional-completion-evidence.md), [final scope](docs/FINAL-SCOPE.md), [build state](docs/BUILD-STATE.md).

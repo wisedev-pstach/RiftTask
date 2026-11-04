@@ -27,31 +27,28 @@ function fixture(t, overrides = {}) {
   for (const cmd of ['bash', 'dirname', 'mktemp', 'cp', 'rm', 'chmod', 'head', 'mkdir', 'grep', 'cat']) {
     fs.symlinkSync(executable(cmd), path.join(bin, cmd));
   }
-  // Only controlled programs are visible: never discover a real gh or npm.
+  // Only controlled programs are visible: gh is a fail-fast trap, never a real CLI.
   const program = `#!${process.execPath}\n` + String.raw`
 const fs=require('node:fs'),path=require('node:path');
 const cmd=path.basename(process.argv[1]),args=process.argv.slice(2),e=process.env;
 fs.appendFileSync(e.LOG,JSON.stringify([cmd,...args])+'\n');
 if(cmd==='uname') { console.log(args[0]==='-s' ? (e.FIXTURE_OS || 'Linux') : (e.ARCH || 'x86_64')); process.exit(0); }
+if(cmd==='gh') process.exit(97); // Any installer invocation is a regression.
 if(args.includes('--version')) { console.log(cmd==='node' ? (e.NODE_VERSION || 'v24.15.0') : 'fixture 1'); process.exit(0); }
 if(cmd==='node') { console.log('24.15.0'); process.exit(0); }
-if(cmd==='gh' && args[0]==='auth') process.exit(e.AUTH_FAIL==='1'?1:0);
 if(cmd==='git' && e.LOCAL_SOURCE) {
- const r=require('node:child_process').spawnSync(e.REAL_GIT,args,{env:e,encoding:'utf8'});process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');process.exit(r.status??1);
+ const actual=args[0]==='clone'?args.map(a=>a==='https://github.com/wisedev-pstach/RiftTask.git'?e.LOCAL_SOURCE:a):args;
+ const r=require('node:child_process').spawnSync(e.REAL_GIT,actual,{env:e,encoding:'utf8'});process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');process.exit(r.status??1);
 }
-if(cmd==='gh' && args[0]==='repo') {
-  if(e.LOCAL_SOURCE) {
-    const r=require('node:child_process').spawnSync(e.REAL_GIT,['clone',...args.slice(5),'--',e.LOCAL_SOURCE,args[3]],{env:e,encoding:'utf8'});
-    process.stdout.write(r.stdout||''); process.stderr.write(r.stderr||''); process.exit(r.status??1);
-  }
-  const dest=args[3]; fs.mkdirSync(dest,{recursive:true});
+if(cmd==='git' && args[0]==='clone') {
+  const dest=args.at(-1); fs.mkdirSync(dest,{recursive:true});
   fs.mkdirSync(path.join(dest,'release','linux-unpacked'),{recursive:true});
   fs.writeFileSync(path.join(dest,'release','linux-unpacked','stale'),'stale');
   if(e.STALE_EXEC==='1') fs.writeFileSync(path.join(dest,'release','linux-unpacked','rifttask'),'stale executable',{mode:0o755});
   process.exit(e.FAIL==='clone'?9:0);
 }
 const step=cmd==='npm' ? (args[0]==='ci'?'ci':args[1]) : 'package';
-if(e.LOCAL_SOURCE && cmd==='npm' && args[0]==='ci' && fs.readFileSync('ref-marker','utf8')!=='feature') process.exit(19);
+if(e.LOCAL_SOURCE && cmd==='npm' && args[0]==='ci' && fs.readFileSync('ref-marker','utf8')!==(e.EXPECT_MARKER || 'feature')) process.exit(19);
 if(e.FAIL===step) process.exit(9);
 if(cmd==='npx' || step==='pack') {
   if(e.NO_OUTPUT==='1') process.exit(0);
@@ -71,7 +68,7 @@ if(cmd==='npx' || step==='pack') {
     fs.writeFileSync(path.join(bin, cmd), program, {mode:0o755});
   }
   const env = {PATH:bin, HOME:home, TMPDIR:tmp, LOG:path.join(dir,'calls'), BASH:bash,
-    RIFTTASK_SKIP_CANDIDATE_SEARCH:'1', ...overrides};
+    ...overrides};
   const dest = path.join(dir, 'destination');
   const script = path.join(dir, 'install.sh');
   fs.copyFileSync(installSh,script);
@@ -99,7 +96,7 @@ test('PowerShell source contract: all native calls use immediately checked exit 
   const s=fs.readFileSync(installPs1,'utf8');
   assert.match(s,/function Invoke-Native[\s\S]*?& \$Command @Arguments\s*\r?\n\s*if \(\$LASTEXITCODE -ne 0\)/);
   assert.equal(s.includes('Select-Object -First'),false,'do not short-circuit the native exit check');
-  for(const command of ["Invoke-Native gh @('auth', 'status')", "Invoke-Native gh @('repo', 'clone'", "Invoke-Native npm @('ci'", "Invoke-Native npm @('run', 'native:rebuild')", "Invoke-Native npm @('run', 'build')", "Invoke-Native npx @("])
+  for(const command of ["Invoke-Native git @('clone'", "Invoke-Native npm @('ci'", "Invoke-Native npm @('run', 'native:rebuild')", "Invoke-Native npm @('run', 'build')", "Invoke-Native npx @("])
     assert.ok(s.includes(command),command);
 });
 test('PowerShell source contract: refuse existing literal destination, no recursive user-path removal (not native proof)', () => {
@@ -110,16 +107,18 @@ test('PowerShell source contract: refuse existing literal destination, no recurs
   assert.ok(s.includes('New-Item -ItemType Directory -Path $TargetDir -ErrorAction Stop'));
   assert.ok(s.includes('Copy-Item -LiteralPath'));
 });
-test('PowerShell source contract: isolated explicit feature clone owned before clone and cleanup after Pop (not native proof)', () => {
+test('PowerShell source contract: isolated public main clone owned before clone and cleanup after Pop (not native proof)', () => {
   const s=fs.readFileSync(installPs1,'utf8');
-  assert.ok(s.includes("$SourceRef = 'feat/cloud-persistence'"));
+  assert.equal(/Get-Command gh|Invoke-Native gh|credential\.helper/.test(s),false);
+  assert.ok(s.includes('https://github.com/wisedev-pstach/RiftTask.git'));
+  assert.ok(s.includes("$SourceRef = 'main'"));
   assert.ok(s.includes("'--depth=1', '--branch', $SourceRef"));
   assert.equal(s.includes('Using existing repository'),false);
-  assert.ok(s.indexOf('try {\n    New-Item -ItemType Directory -Path $TempBuildDir') < s.indexOf("Invoke-Native gh @('repo'"));
+  assert.ok(s.indexOf('try {\n    New-Item -ItemType Directory -Path $TempBuildDir') < s.indexOf("Invoke-Native git @('clone'"));
   assert.ok(s.includes('Remove-Item -LiteralPath $TempBuildDir'));
 });
 test('PowerShell source contract: full commit pin is validated, fetched and verified before npm (not native proof)',()=>{
- const s=fs.readFileSync(installPs1,'utf8');assert.ok(s.includes('[string]$Ref'));assert.ok(s.includes("'^[0-9a-f]{40}$'"));assert.ok(s.includes("'credential.helper=!gh auth git-credential', 'fetch', '--depth=1', 'origin', $Ref)"));assert.ok(s.includes("Invoke-Native git @('checkout', '--detach', $Ref)"));assert.ok(s.includes('$ActualCommit -cne $Ref'));
+ const s=fs.readFileSync(installPs1,'utf8');assert.ok(s.includes('[string]$Ref'));assert.ok(s.includes("'^[0-9a-f]{40}$'"));assert.ok(s.includes("Invoke-Native git @('fetch', '--depth=1', 'origin', $Ref)"));assert.ok(s.includes("Invoke-Native git @('checkout', '--detach', $Ref)"));assert.ok(s.includes('$ActualCommit -cne $Ref'));
 });
 test('PowerShell source contract: ARM64 architecture and unpacked path are explicit (not native proof)', () => {
   const s=fs.readFileSync(installPs1,'utf8');
@@ -208,7 +207,7 @@ test('failed clone/install/rebuild/build/package stop before consuming stale exe
   }
 });
 test('successful check is side-effect-free and missing tools fail using isolated PATH', posix, t => {
-  for (const missing of [null,'gh','node','npm','git']) {
+  for (const missing of [null,'node','npm','git']) {
     const f=fixture(t);
     if(missing) fs.unlinkSync(path.join(f.bin,missing));
     const r=f.run(['--check','--dest',f.dest]);
@@ -217,11 +216,12 @@ test('successful check is side-effect-free and missing tools fail using isolated
     assert.deepEqual(fs.readdirSync(f.home),[]);
     assert.deepEqual(fs.readdirSync(f.tmp),[]);
     assert.equal(fs.existsSync(f.dest),false);
-    assert.equal(f.calls().some(c=>c[1]==='repo'||c[1]==='ci'),false);
+    assert.equal(f.calls().some(c=>c[1]==='clone'||c[1]==='ci'),false);
   }
 });
-test('real local Git clone selects feature even when default main lacks feature content', posix, t => {
-  const f=fixture(t);
+test('public isolated source build uses main with gh absent and authentication unavailable', posix, t => {
+  const f=fixture(t,{AUTH_FAIL:'1',GH_TOKEN:'',GITHUB_TOKEN:'',EXPECT_MARKER:'main'});
+  fs.unlinkSync(path.join(f.bin,'gh'));
   const git=executable('git');
   const remote=path.join(f.dir,'local-source');fs.mkdirSync(remote);
   const gitEnv={...f.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:path.join(f.dir,'no-config'),GIT_ALLOW_PROTOCOL:'file'};
@@ -250,14 +250,15 @@ test('missing destination option value fails actionably before commands', posix,
 test('source commit pin is fetched, checked out detached and verified before building (real Git fixture)',posix,t=>{
  const f=fixture(t);const git=executable('git');const remote=path.join(f.dir,'pin-source');fs.mkdirSync(remote);const gitEnv={...f.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:path.join(f.dir,'no-config'),GIT_ALLOW_PROTOCOL:'file'};
  const run=args=>{const r=spawnSync(git,args,{cwd:remote,env:gitEnv,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
- run(['init','-b','feat/cloud-persistence']);fs.writeFileSync(path.join(remote,'ref-marker'),'feature');run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','pinned']);const pin=run(['rev-parse','HEAD']);
+ run(['init','-b','main']);fs.writeFileSync(path.join(remote,'ref-marker'),'feature');run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','pinned']);const pin=run(['rev-parse','HEAD']);
  fs.writeFileSync(path.join(remote,'ref-marker'),'wrong-tip');run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','moving tip']);
  Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});const r=f.run(['--ref',pin,'--dest',f.dest]);assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes(pin));assert.equal(fs.existsSync(path.join(f.dest,'rifttask')),true);
  const bad=fixture(t);const result=bad.run(['--ref','--upload-pack=injected']);assert.notEqual(result.status,0);assert.deepEqual(bad.calls(),[]);
 });
-test('README one-command source handoff executes authenticated-clone fixture and installs the captured exact commit',posix,t=>{
+test('README one-command source handoff executes public-clone fixture without gh and installs the captured exact commit',posix,t=>{
  const f=fixture(t),git=executable('git'),remote=path.join(f.dir,'handoff-source');fs.mkdirSync(path.join(remote,'scripts'),{recursive:true});fs.copyFileSync(installSh,path.join(remote,'scripts/install.sh'));fs.writeFileSync(path.join(remote,'ref-marker'),'feature');const gitEnv={...f.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:path.join(f.dir,'no-config'),GIT_ALLOW_PROTOCOL:'file'};
- const run=args=>{const r=spawnSync(git,args,{cwd:remote,env:gitEnv,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};run(['init','-b','feat/cloud-persistence']);run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','handoff']);const pin=run(['rev-parse','HEAD']);Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});
+ const run=args=>{const r=spawnSync(git,args,{cwd:remote,env:gitEnv,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};run(['init','-b','main']);run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','handoff']);const pin=run(['rev-parse','HEAD']);Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});
+ fs.unlinkSync(path.join(f.bin,'gh'));
  const recipe=fs.readFileSync(path.join(root,'README.md'),'utf8').split('\n').find(line=>line.startsWith('test ! -e RiftTask-source-preview'));assert.ok(recipe);const r=spawnSync(bash,['-c',recipe],{cwd:f.dir,env:f.env,encoding:'utf8',timeout:15000});assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes(pin));assert.equal(fs.existsSync(path.join(f.home,'.local/share/rifttask/rifttask')),true);
  const before=f.calls();const again=spawnSync(bash,['-c',recipe],{cwd:f.dir,env:f.env,encoding:'utf8'});assert.notEqual(again.status,0);assert.deepEqual(f.calls(),before,'existing source checkout stops before all external commands');
 });
@@ -265,13 +266,18 @@ test('Bash syntax and help', posix, () => {
   assert.equal(spawnSync(bash,['-n',installSh]).status,0);
   assert.match(spawnSync(bash,[installSh,'--help'],{encoding:'utf8'}).stdout,/Usage: install.sh/);
 });
-test('unauthenticated check fails without modifying filesystem', posix, t => {
-  const f=fixture(t,{AUTH_FAIL:'1'});
-  const r=f.run(['--check','--dest',f.dest]);
-  assert.notEqual(r.status,0,r.stdout+r.stderr);
-  assert.equal(fs.existsSync(f.dest),false);
-  assert.deepEqual(fs.readdirSync(f.tmp),[]);
-  assert.equal(f.calls().some(c=>c[1]==='repo'||c[1]==='ci'),false);
+test('public source check succeeds with gh absent or trapped and authentication unavailable', posix, t => {
+  for (const absent of [true,false]) {
+    const f=fixture(t,{AUTH_FAIL:'1',GH_TOKEN:'',GITHUB_TOKEN:''});
+    if (absent) fs.unlinkSync(path.join(f.bin,'gh'));
+    else fs.writeFileSync(path.join(f.bin,'gh'),`#!${process.execPath}\nrequire('node:fs').appendFileSync(process.env.LOG,JSON.stringify(['gh','FORBIDDEN'])+'\\n');process.exit(97);`,{mode:0o755});
+    const r=f.run(['--check','--dest',f.dest]);
+    assert.equal(r.status,0,r.stdout+r.stderr);
+    assert.equal(fs.existsSync(f.dest),false);
+    assert.deepEqual(fs.readdirSync(f.home),[]);
+    assert.deepEqual(fs.readdirSync(f.tmp),[]);
+    assert.equal(f.calls().some(c=>c[0]==='gh'||c[1]==='clone'||c[1]==='ci'),false);
+  }
 });
 test('relative TMPDIR is rejected before clone without owned-tree leaks', posix, t => {
   const f=fixture(t,{TMPDIR:'tmp'});
@@ -280,17 +286,19 @@ test('relative TMPDIR is rejected before clone without owned-tree leaks', posix,
   const r=f.run(['--dest',f.dest]);
   assert.notEqual(r.status,0,r.stdout+r.stderr);
   assert.match(r.stderr,/TMPDIR.*absolute/i);
-  assert.equal(f.calls().some(c=>c[1]==='repo'||c[1]==='ci'),false);
+  assert.equal(f.calls().some(c=>c[1]==='clone'||c[1]==='ci'),false);
   assert.deepEqual(fs.readdirSync(f.tmp),['unrelated']);
   assert.equal(fs.readFileSync(sentinel,'utf8'),'preserve');
   assert.equal(fs.existsSync(f.dest),false);
 });
-test('source clone explicitly selects the feature ref, never default main or local checkout', posix, t => {
+test('source clone explicitly selects public HTTPS main in an isolated tree', posix, t => {
   const f=fixture(t);
   const r=f.run(['--dest',f.dest]);
-  const clone=f.calls().find(c=>c[0]==='gh'&&c[1]==='repo');
+  const clone=f.calls().find(c=>c[0]==='git'&&c[1]==='clone');
   assert.ok(clone,r.stdout+r.stderr);
-  assert.deepEqual(clone.slice(5),['--','--depth=1','--branch','feat/cloud-persistence']);
+  assert.deepEqual(clone.slice(1,6),['clone','--depth=1','--branch','main','https://github.com/wisedev-pstach/RiftTask.git']);
+  assert.ok(clone[6].startsWith(f.tmp+path.sep));
+  assert.equal(f.calls().some(c=>c[0]==='gh'),false);
   assert.deepEqual(fs.readdirSync(f.tmp),[], 'owned build root cleaned');
 });
 test('every existing destination is refused before build and preserved byte-for-byte', posix, t => {
@@ -304,6 +312,6 @@ test('every existing destination is refused before build and preserved byte-for-
     assert.notEqual(r.status,0,`${kind}: ${r.stdout} ${r.stderr}`);
     assert.match(r.stderr,/exist|refus/i);
     assert.equal(fs.readFileSync(kind==='directory'?path.join(f.dest,'data'):f.dest,'utf8'),'precious');
-    assert.equal(f.calls().some(c=>c[1]==='repo'||c[1]==='ci'),false);
+    assert.equal(f.calls().some(c=>c[1]==='clone'||c[1]==='ci'),false);
   }
 });
