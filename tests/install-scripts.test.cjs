@@ -83,6 +83,16 @@ test('PowerShell parser (only when pwsh is already installed)', {skip:pwshProbe.
   const r=spawnSync('pwsh',['-NoProfile','-NonInteractive','-Command',parser],{encoding:'utf8',env:{...process.env,RIFTTASK_PARSER_FILE:installPs1}});
   assert.equal(r.status,0,r.stderr);
 });
+test('PowerShell downloaded entrypoint source contract: IEX-safe returns and scoped preferences (not runtime proof)', () => {
+  const s=fs.readFileSync(installPs1,'utf8');
+  assert.equal(/^\s*exit\b/m.test(s),false,'IEX must never terminate the caller PowerShell session');
+  assert.match(s,/& \{\s*\$ErrorActionPreference = 'Stop'/,'scope preferences and helper functions');
+  assert.match(s,/if \(\$CheckOnly\) \{[^}]*return/s);
+  assert.equal(s.includes('Get-Help $MyInvocation.MyCommand.Path'),false,'downloaded text has no script path');
+  const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');
+  assert.ok(readme.split('\n').includes('irm https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.ps1 | iex'));
+  assert.equal(/ExecutionPolicy\s+Bypass|Set-ExecutionPolicy/i.test(readme),false);
+});
 test('PowerShell source contract: hostile launch path stays plain data (not native proof)', () => {
   const s=fs.readFileSync(installPs1,'utf8');
   const launchLines=s.split('\n').filter(line=>/^\s*Write-Host.*\$ExePath/.test(line));
@@ -255,12 +265,44 @@ test('source commit pin is fetched, checked out detached and verified before bui
  Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});const r=f.run(['--ref',pin,'--dest',f.dest]);assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes(pin));assert.equal(fs.existsSync(path.join(f.dest,'rifttask')),true);
  const bad=fixture(t);const result=bad.run(['--ref','--upload-pack=injected']);assert.notEqual(result.status,0);assert.deepEqual(bad.calls(),[]);
 });
-test('README one-command source handoff executes public-clone fixture without gh and installs the captured exact commit',posix,t=>{
- const f=fixture(t),git=executable('git'),remote=path.join(f.dir,'handoff-source');fs.mkdirSync(path.join(remote,'scripts'),{recursive:true});fs.copyFileSync(installSh,path.join(remote,'scripts/install.sh'));fs.writeFileSync(path.join(remote,'ref-marker'),'feature');const gitEnv={...f.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:path.join(f.dir,'no-config'),GIT_ALLOW_PROTOCOL:'file'};
- const run=args=>{const r=spawnSync(git,args,{cwd:remote,env:gitEnv,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};run(['init','-b','main']);run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','handoff']);const pin=run(['rev-parse','HEAD']);Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});
- fs.unlinkSync(path.join(f.bin,'gh'));
- const recipe=fs.readFileSync(path.join(root,'README.md'),'utf8').split('\n').find(line=>line.startsWith('test ! -e RiftTask-source-preview'));assert.ok(recipe);const r=spawnSync(bash,['-c',recipe],{cwd:f.dir,env:f.env,encoding:'utf8',timeout:15000});assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes(pin));assert.equal(fs.existsSync(path.join(f.home,'.local/share/rifttask/rifttask')),true);
- const before=f.calls();const again=spawnSync(bash,['-c',recipe],{cwd:f.dir,env:f.env,encoding:'utf8'});assert.notEqual(again.status,0);assert.deepEqual(f.calls(),before,'existing source checkout stops before all external commands');
+test('README separates optional inspection and commit pins from the quick setup', () => {
+ const s=fs.readFileSync(path.join(root,'README.md'),'utf8');
+ assert.match(s,/### Optional: download and inspect first/);
+ assert.match(s,/### Advanced: build a reviewed commit/);
+ assert.ok(s.includes('bash ./install.sh --ref "$ref"'));
+ assert.ok(s.includes('& .\\install.ps1 -Ref $Ref'));
+ assert.equal(s.includes('Run it from a directory without an existing `RiftTask-source-preview` folder.'),false);
+});
+function quickRecipe() {
+ const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');
+ const recipe=readme.split('\n').find(line=>line.startsWith("bash -o pipefail -c 'curl -fsSL "));
+ assert.ok(recipe,'README must offer the simple curl | bash recipe with fetch-error propagation');
+ assert.equal(recipe,"bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.sh | bash'");
+ return recipe;
+}
+function curlFixture(f, fail=false) {
+ fs.writeFileSync(path.join(f.bin,'curl'),`#!${process.execPath}\nconst fs=require('node:fs'); const args=process.argv.slice(2); fs.appendFileSync(process.env.LOG,JSON.stringify(['curl',...args])+'\\n'); if(${fail}) process.exit(22); process.stdout.write(fs.readFileSync(${JSON.stringify(f.script)}));`,{mode:0o755});
+}
+test('README quick curl recipe streams macOS source build without gh',posix,t=>{
+ const f=fixture(t,{FIXTURE_OS:'Darwin',ARCH:'arm64'});
+ fs.unlinkSync(path.join(f.bin,'gh'));curlFixture(f);
+ const r=spawnSync(bash,['-c',quickRecipe()],{cwd:f.dir,env:f.env,encoding:'utf8',timeout:15000});
+ assert.equal(r.status,0,r.stdout+r.stderr);
+ assert.equal(fs.existsSync(path.join(f.home,'Applications/RiftTask.app/Contents/MacOS/RiftTask')),true);
+ assert.deepEqual(f.calls()[0],['curl','-fsSL','https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.sh']);
+ assert.equal(f.calls().some(c=>c[0]==='gh'),false);
+ assert.deepEqual(fs.readdirSync(f.tmp),[]);
+ assert.equal(fs.existsSync(path.join(f.dir,'RiftTask-source-preview')),false);
+ const again=spawnSync(bash,['-c',quickRecipe()],{cwd:f.dir,env:f.env,encoding:'utf8'});
+ assert.notEqual(again.status,0);assert.match(again.stderr,/refusing existing destination/);
+ assert.equal(f.calls().filter(c=>c[1]==='clone').length,1,'retry must not build or overwrite');
+});
+test('README quick curl recipe reports fetch failure without clone or build',posix,t=>{
+ const f=fixture(t);curlFixture(f,true);
+ const r=spawnSync(bash,['-c',quickRecipe()],{cwd:f.dir,env:f.env,encoding:'utf8',timeout:15000});
+ assert.equal(r.status,22,r.stdout+r.stderr);
+ assert.equal(f.calls().length,1,'failed fetch must not start installer commands');
+ assert.deepEqual(fs.readdirSync(f.home),[]);assert.deepEqual(fs.readdirSync(f.tmp),[]);
 });
 test('Bash syntax and help', posix, () => {
   assert.equal(spawnSync(bash,['-n',installSh]).status,0);
