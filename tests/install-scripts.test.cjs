@@ -106,7 +106,7 @@ test('PowerShell source contract: all native calls use immediately checked exit 
   const s=fs.readFileSync(installPs1,'utf8');
   assert.match(s,/function Invoke-Native[\s\S]*?& \$Command @Arguments\s*\r?\n\s*if \(\$LASTEXITCODE -ne 0\)/);
   assert.equal(s.includes('Select-Object -First'),false,'do not short-circuit the native exit check');
-  for(const command of ["Invoke-Native git @('clone'", "Invoke-Native npm @('ci'", "Invoke-Native npm @('run', 'native:rebuild')", "Invoke-Native npm @('run', 'build')", "Invoke-Native npx @("])
+  for(const command of ["Invoke-Native git @('clone'", "Invoke-Native npm @('ci'", "Invoke-Native npm @('run', 'native:prepare', '--', $Arch)", "Invoke-Native npm @('run', 'build')", "Invoke-Native npx @("])
     assert.ok(s.includes(command),command);
 });
 test('PowerShell source contract: refuse existing literal destination, no recursive user-path removal (not native proof)', () => {
@@ -145,6 +145,28 @@ test('PowerShell source contract: preview validates Node baseline and writes no 
   assert.equal(s.includes('CreateShortcut'),false,'preview must not replace unrelated shortcuts');
 });
 const posix = {skip: process.platform === 'win32' ? 'POSIX installer requires Bash' : false};
+test('macOS installer uses script-free ci, exact runtime arch preparation, and disables packaging rebuild', posix, t => {
+ const f=fixture(t,{FIXTURE_OS:'Darwin',ARCH:'arm64',npm_config_build_from_source:'true'});
+ const r=f.run(['--dest',path.join(f.dir,'new.app')]);
+ assert.equal(r.status,0,r.stdout+r.stderr);
+ const calls=f.calls();
+ assert.ok(calls.find(c=>c[0]==='npm'&&c[1]==='ci').includes('--ignore-scripts'));
+ assert.deepEqual(calls.find(c=>c[0]==='npm'&&c[2]==='native:prepare'),['npm','run','native:prepare','--','arm64']);
+ assert.equal(calls.some(c=>c.includes('native:rebuild')),false);
+ assert.ok(calls.find(c=>c[0]==='npx').includes('--config.npmRebuild=false'));
+});
+test('macOS failed native preparation stops before build, packaging or destination creation', posix,t=>{
+ const f=fixture(t,{FIXTURE_OS:'Darwin',FAIL:'native:prepare'});const dest=path.join(f.dir,'new.app');
+ const r=f.run(['--dest',dest]);assert.notEqual(r.status,0);assert.equal(fs.existsSync(dest),false);
+ assert.equal(f.calls().some(c=>c[0]==='npx'||c[2]==='build'),false);assert.deepEqual(fs.readdirSync(f.tmp),[]);
+});
+test('Windows source contract consumes prebuilds without lifecycle compilation (not native execution)',()=>{
+ const s=fs.readFileSync(installPs1,'utf8');
+ assert.match(s,/Invoke-Native npm @\('ci', '--ignore-scripts'/);
+ assert.ok(s.includes("Invoke-Native npm @('run', 'native:prepare', '--', $Arch)"));
+ assert.ok(s.includes("'--config.npmRebuild=false'"));
+ assert.equal(s.includes("'native:rebuild'"),false);
+});
 test('Linux launcher treats metacharacter destination and arguments as literal data', posix, t => {
   const f=fixture(t);
   const dest=path.join(f.dir,'literal $(mkdir injected) `mkdir backtick` $HOME " [x]');
@@ -207,7 +229,7 @@ test('macOS ARM64 never falls back to a different architecture output', posix, t
   assert.equal(fs.existsSync(dest),false);
 });
 test('failed clone/install/rebuild/build/package stop before consuming stale executable output', posix, t => {
-  for (const fail of ['clone','ci','native:rebuild','build','package']) {
+  for (const fail of ['clone','ci','native:prepare','build','package']) {
     const f=fixture(t,{FAIL:fail,STALE_EXEC:'1'});
     const r=f.run(['--dest',f.dest]);
     assert.notEqual(r.status,0,`${fail}: ${r.stdout} ${r.stderr}`);
@@ -265,8 +287,21 @@ test('source commit pin is fetched, checked out detached and verified before bui
  Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});const r=f.run(['--ref',pin,'--dest',f.dest]);assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes(pin));assert.equal(fs.existsSync(path.join(f.dest,'rifttask')),true);
  const bad=fixture(t);const result=bad.run(['--ref','--upload-pack=injected']);assert.notEqual(result.status,0);assert.deepEqual(bad.calls(),[]);
 });
-test('README separates optional inspection and commit pins from the quick setup', () => {
+test('README is a short concrete entrypoint with detailed setup relocated', () => {
  const s=fs.readFileSync(path.join(root,'README.md'),'utf8');
+ assert.ok(s.trim().split('\n').length <= 70, 'keep README at most 70 lines');
+ assert.match(s,/docs\/SETUP\.md/);
+ assert.match(s,/no (?:C\+\+|compiler)/i);
+ const guide=fs.readFileSync(path.join(root,'docs/SETUP.md'),'utf8');
+ assert.match(guide,/### Optional: download and inspect first/);
+ assert.match(guide,/### Advanced: build a reviewed commit/);
+ assert.ok(guide.includes('bash ./install.sh --ref "$ref"'));
+ assert.ok(guide.includes('& .\\install.ps1 -Ref $Ref'));
+});
+test('README separates optional inspection and commit pins from the quick setup', () => {
+ const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');
+ assert.match(readme,/docs\/SETUP\.md/);
+ const s=fs.readFileSync(path.join(root,'docs/SETUP.md'),'utf8');
  assert.match(s,/### Optional: download and inspect first/);
  assert.match(s,/### Advanced: build a reviewed commit/);
  assert.ok(s.includes('bash ./install.sh --ref "$ref"'));

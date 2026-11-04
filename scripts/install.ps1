@@ -5,10 +5,10 @@
 
 .DESCRIPTION
     Checks build prerequisites (git, node, npm),
-    clones public main over HTTPS into a fresh tree, compiles native dependencies (node-pty),
+    clones public main over HTTPS into a fresh tree, uses shipped node-pty N-API prebuilds,
     packages RiftTask and installs it to %LOCALAPPDATA%\Programs\RiftTask,
     refusing all existing destinations. No shared shortcuts or upgrades.
-    Requires Node 24.15+ (24.x) or 26+, Python 3 and MSVC C++ build tools.
+    Requires Git and Node 24.15+ (24.x) or 26+ with npm/npx; no C++ toolchain.
     Native Windows execution is not yet verified.
 
 .PARAMETER Check
@@ -116,7 +116,7 @@ if (Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue) {
 }
 
 if ($CheckOnly) {
-    Write-Host "Tools/destination check passed. Compilation and native launch remain unverified." -ForegroundColor Green
+    Write-Host "Tools/destination check passed. Dependency/runtime verification and native launch remain unverified." -ForegroundColor Green
     return
 }
 
@@ -141,12 +141,13 @@ try {
     }
 
     Write-Host "Building RiftTask from source..." -ForegroundColor Cyan
-    Invoke-Native npm @('ci', '--no-audit', '--no-fund')
-    Invoke-Native npm @('run', 'native:rebuild')
+    # Prevent all lifecycle compile fallbacks, including inherited build_from_source.
+    Invoke-Native npm @('ci', '--ignore-scripts', '--no-audit', '--no-fund')
+    Invoke-Native npm @('run', 'native:prepare', '--', $Arch)
     Invoke-Native npm @('run', 'build')
 
     Write-Host "Packaging Windows application..." -ForegroundColor Cyan
-    Invoke-Native npx @('--no-install', 'electron-builder', '--win', "--$Arch", '--dir', '--publish', 'never')
+    Invoke-Native npx @('--no-install', 'electron-builder', '--win', "--$Arch", '--dir', '--publish', 'never', '--config.npmRebuild=false')
 
     $BundlePath = if ($Arch -eq 'arm64') { 'release\win-arm64-unpacked' } else { 'release\win-unpacked' }
     $WinBundle = Join-Path $BuildDir $BundlePath
