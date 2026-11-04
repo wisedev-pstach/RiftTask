@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">RiftTask</title>
+  <desc id="desc">A lime checkmark with a diagonal rift on a rounded graphite tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="160" y1="72" x2="864" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24282d"/>
+      <stop offset="1" stop-color="#111418"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="206" fill="url(#tile)"/>
+  <path fill="#c8ff63" d="M236 510 330 416 452 538 694 296 788 390 452 726Z"/>
+  <path fill="url(#tile)" d="M650 173 715 173 380 850 315 850Z"/>
+</svg>

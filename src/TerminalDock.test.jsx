@@ -5,7 +5,7 @@ import {it,expect,vi} from 'vitest';
 import App from './App.jsx';
 const bridge=w=>({session:async()=>({account:{id:1,login:'example'},offline:false}),load:async()=>w,save:async w=>w});
 const terminals=vi.hoisted(()=>[]);
-vi.mock('@xterm/xterm',()=>({Terminal:class{cols=80;rows=24;writes=[];resets=0;constructor(){terminals.push(this);}open(){}loadAddon(){}onData(f){this.input=f;return {dispose(){}};}write(data){this.writes.push(data);}reset(){this.resets++;}dispose(){}focus(){}}}));
+vi.mock('@xterm/xterm',()=>({Terminal:class{cols=80;rows=24;writes=[];resets=0;constructor(options){this.options=options;terminals.push(this);}open(){}loadAddon(){}onData(f){this.input=f;return {dispose(){}};}write(data){this.writes.push(data);}reset(){this.resets++;}dispose(){}focus(){}}}));
 vi.mock('@xterm/addon-fit',()=>({FitAddon:class{fit(){}}}));
 const workspace=()=>({version:1,categories:[{id:'c',name:'Examples',color:'#ffffff'}],projects:['a','b'].map(id=>({id,categoryId:'c',name:`Example ${id}`,description:'',repositoryUrl:'',localPath:'/example',archived:false})),tasks:[],updatedAt:new Date().toISOString()});
 it('streams incremental output without resetting an active shell and routes keyboard input to its token',async()=>{
@@ -39,4 +39,10 @@ it('starts only explicitly with shell warning and retains project sessions acros
  await u.click(screen.getByRole('button',{name:'Example b',exact:true}));expect(screen.getByRole('button',{name:'Start native shell'})).toBeInTheDocument();expect(api.ptyClose).not.toHaveBeenCalled();
  await u.click(screen.getByRole('button',{name:'Example a',exact:true}));await screen.findByRole('button',{name:'Close shell'});expect(api.ptyStart).toHaveBeenCalledTimes(1);
  await u.click(screen.getByRole('button',{name:'Close shell'}));await waitFor(()=>expect(api.ptyClose).toHaveBeenCalledWith('a','session-a'));expect(screen.getByRole('button',{name:'Start native shell'})).toBeInTheDocument();
+});
+
+it('updates terminal contrast without recreating the retained shell through Settings',async()=>{
+ localStorage.setItem('rifttask.appearance','dark');const api=bridge(workspace());api.ptyStart=vi.fn(async()=>({id:'theme-shell',output:'prompt',revision:0,running:true}));api.ptyRead=vi.fn(async()=>({id:'theme-shell',output:'prompt',revision:0,running:true}));api.ptyResize=vi.fn(async()=>{});api.ptyClose=vi.fn();
+ const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Example a',exact:true}));await u.click(screen.getByRole('button',{name:'Start native shell'}));const shell=terminals.at(-1),count=terminals.length;
+ await u.click(screen.getByRole('button',{name:'Settings',exact:true}));await u.click(screen.getByRole('button',{name:'Light',exact:true}));expect(shell.options.theme).toMatchObject({background:'#f3f5f7',foreground:'#25303b'});await u.click(screen.getByRole('button',{name:'Back to workspace'}));expect(terminals).toHaveLength(count);expect(api.ptyStart).toHaveBeenCalledOnce();expect(api.ptyClose).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'Close shell'})).toBeInTheDocument();localStorage.clear();
 });

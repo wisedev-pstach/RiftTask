@@ -3,11 +3,14 @@ import {Terminal} from '@xterm/xterm';
 import {FitAddon} from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
-function Surface({bridge,projectId,session,onState,onError,onUnavailable}){
- const host=useRef(null);
+const terminalTheme=theme=>theme==='light'?{background:'#f3f5f7',foreground:'#25303b',cursor:'#47691a',selectionBackground:'#cdddb3'}:{background:'#111419',foreground:'#dce2e8',cursor:'#c8ff63',selectionBackground:'#354329'};
+function Surface({bridge,projectId,session,onState,onError,onUnavailable,theme}){
+ const host=useRef(null),instance=useRef(null);
+ useEffect(()=>{if(instance.current)instance.current.options.theme=terminalTheme(theme);},[theme]);
  useEffect(()=>{
   let alive=true,busy=false,revision=-1,pending=0,previous='';
-  const terminal=new Terminal({scrollback:1000,fontSize:13,theme:{background:'#0c1016',foreground:'#d5dce8'},allowProposedApi:false});
+  const terminal=new Terminal({scrollback:1000,fontSize:13,theme:terminalTheme(theme),allowProposedApi:false});
+  instance.current=terminal;
   const fit=new FitAddon();terminal.loadAddon(fit);terminal.open(host.current);
   const fail=e=>{if(alive)onError(e.message||'Native terminal unavailable.');};
   const size=()=>{if(!alive)return;try{fit.fit();const cols=Math.max(2,Math.min(300,terminal.cols)),rows=Math.max(2,Math.min(100,terminal.rows));bridge.ptyResize(projectId,session.id,cols,rows).catch(fail);}catch{}};
@@ -22,11 +25,11 @@ function Surface({bridge,projectId,session,onState,onError,onUnavailable}){
   paint(session);
   const poll=async()=>{if(busy||!alive)return;busy=true;try{paint(await bridge.ptyRead(projectId,session.id));}catch(e){if(alive){fail(e);alive=false;onUnavailable();}}finally{busy=false;}};
   const timer=setInterval(poll,500);const observer=typeof ResizeObserver!=='undefined'?new ResizeObserver(size):null;observer?.observe(host.current);size();terminal.focus();
-  return ()=>{alive=false;clearInterval(timer);observer?.disconnect();input.dispose();terminal.dispose();};
+  return ()=>{alive=false;clearInterval(timer);observer?.disconnect();input.dispose();terminal.dispose();instance.current=null;};
  },[bridge,projectId,session.id]);
  return <div ref={host} className="terminal-surface" aria-label="Interactive native shell"/>;
 }
-export default function TerminalDock({bridge,project,projects,disabled}){
+export default function TerminalDock({bridge,project,projects,disabled,theme}){
  const [sessions,setSessions]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const active=useRef(null);active.current=project?`${project.id}:${project.localPath}`:null;
  const mounted=useRef(true),currentProjects=useRef(projects);currentProjects.current=projects;
@@ -39,7 +42,7 @@ export default function TerminalDock({bridge,project,projects,disabled}){
  async function close(){const key=active.current,p=project;setBusy(true);try{await bridge.ptyClose(p.id,session.id);if(active.current===key)setSessions(old=>{const next={...old};delete next[p.id];return next;});}catch(e){if(active.current===key){setError(e.message);setSessions(old=>{const next={...old};delete next[p.id];return next;});}}finally{if(active.current===key)setBusy(false);}}
  return <section hidden={!project} aria-label="Project terminal" className="terminal-dock">
   <div className="terminal-heading"><strong>TERMINAL <small>{project?.name} · local shell</small></strong>{session?<button disabled={busy||disabled} onClick={close}>Close shell</button>:<button disabled={!native||!project?.localPath||busy||disabled} onClick={start}>{busy?'Starting…':'Start native shell'}</button>}</div>
-  {!native?<p>Native terminal unavailable in browser preview. No shell is running here.</p>:!session?<p>Explicit start only. The shell has full access to your files and network as your OS user. App credentials are not inherited; credentials on disk remain accessible. No project scripts are started automatically. Choose a saved local directory first.</p>:<><p className="terminal-status">{session.unavailable?'Shell connection unavailable · close to retry':session.running?'Running · retained when switching projects and tabs':'Shell exited · close to start again'} · up to 4 sessions · bounded recent output</p>{!session.unavailable&&<Surface key={`${project.id}:${session.id}`} bridge={bridge} projectId={project.id} session={session} onState={state=>setSessions(old=>old[project.id]?.id===state.id?{...old,[project.id]:{...state,path:project.localPath}}:old)} onError={setError} onUnavailable={()=>setSessions(old=>old[project.id]?.id===session.id?{...old,[project.id]:{...old[project.id],unavailable:true}}:old)}/>}</>}
+  {!native?<p>Native terminal unavailable in browser preview. No shell is running here.</p>:!session?<p>Explicit start only. The shell has full access to your files and network as your OS user. App credentials are not inherited; credentials on disk remain accessible. No project scripts are started automatically. Choose a saved local directory first.</p>:<><p className="terminal-status">{session.unavailable?'Shell connection unavailable · close to retry':session.running?'Running · retained when switching projects and tabs':'Shell exited · close to start again'} · up to 4 sessions · bounded recent output</p>{!session.unavailable&&<Surface key={`${project.id}:${session.id}`} bridge={bridge} theme={theme} projectId={project.id} session={session} onState={state=>setSessions(old=>old[project.id]?.id===state.id?{...old,[project.id]:{...state,path:project.localPath}}:old)} onError={setError} onUnavailable={()=>setSessions(old=>old[project.id]?.id===session.id?{...old,[project.id]:{...old[project.id],unavailable:true}}:old)}/>}</>}
   {error&&<p role="alert">{error}</p>}
  </section>;
 }

@@ -1,5 +1,14 @@
 # RiftTask — build state
 
+## Current: compact workspace, appearance and Settings
+- Original RiftTask split-check icon in the RiftCode graphite/lime family, with browser, BrowserWindow and platform packaging assets.
+- Compact category/project navigation; light/dark/system appearance saved locally. Settings separates appearance, manual cloud, account and backups from project tasks. One retained cloud panel; terminal sessions survive Settings navigation and appearance changes.
+- Parent verification: 190 core passes / 7 gated skips; 56 UI passes; build/whitespace passed. All five Windows/macOS x64/ARM64 and Linux archive cases executed separately and passed; fresh Linux archive icon bytes and icon-format decoding passed.
+- Final independent review passed after fixing the initial-load/cloud lock race and packaged relative icon paths. Browser preview has example data and a simulated native/cloud bridge; fresh light/dark/settings captures were inspected, with no console errors or overflow at 1440/1024 widths.
+- Native Windows/macOS GUI, Dock/taskbar appearance and signing remain owner/platform checks. No actual user workspace, credentials or cloud data accessed. Details: `docs/compact-ui-evidence.md`, `docs/APP-ICON.md`.
+
+## Earlier implementation evidence
+
 ## Current: 4 November — compiler-free Mac/Windows terminal preparation
 - Mac/Windows source installers use script-free locked dependency installation, exact-architecture node-pty 1.1.0 N-API prebuild validation, explicit pinned Electron download and an actual Electron PTY smoke before build/copy. Missing/incompatible binaries fail closed; no compiler fallback or shared npm configuration change. `native:rebuild` is a compatibility alias for platform-aware `native:prepare`; Linux retains its Electron-native rebuild path. Packaging skips rebuilding only on prebuilt platforms; asar/helper protections remain.
 - README shortened to **42 lines** with the unchanged tested curl/irm commands, concrete prerequisites/install locations and app-identity/privacy distinction. Detailed setup/development/safety/advanced pins relocated to `docs/SETUP.md`.

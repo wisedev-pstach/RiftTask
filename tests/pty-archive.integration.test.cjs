@@ -11,7 +11,7 @@ if (process.env.RIFT_TEST_ARCHIVES) {
   test.before(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'rift-archive-source-'));
     const source = path.resolve(__dirname, '..');
-    for (const name of ['package.json', 'package-lock.json', '.npmrc', 'desktop', 'scripts', 'dist']) fs.cpSync(path.join(source, name), path.join(root, name), {recursive:true});
+    for (const name of ['package.json', 'package-lock.json', '.npmrc', 'desktop', 'scripts', 'dist', 'build']) fs.cpSync(path.join(source, name), path.join(root, name), {recursive:true});
     const install = spawnSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {cwd:root, encoding:'utf8', timeout:120000});
     assert.equal(install.status, 0, `${install.stdout}\n${install.stderr}`);
   });
