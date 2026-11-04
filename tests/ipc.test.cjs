@@ -10,13 +10,13 @@ const indexURL = pathToFileURL(path.resolve(__dirname, '../dist/index.html')).hr
 function harness() {
   const handlers = new Map(); const calls = [];
   const frame = {url:indexURL}; const webContents = {mainFrame:frame};
-  const service = Object.fromEntries(['session','login','logout','load','save'].map(name => [name, async (...args) => {calls.push([name,...args]); return {ok:name};}]));
+  const service = Object.fromEntries(['session','login','checkLogin','logout','load','save'].map(name => [name, async (...args) => {calls.push([name,...args]); return {ok:name};}]));
   const dispose = registerIpc({ipcMain:{handle:(k,v)=>handlers.set(k,v),removeHandler:k=>handlers.delete(k)},webContents,indexURL,service,shell:{openExternal:async url=>calls.push(['external',url])}});
   return {handlers,calls,dispose,webContents,event:{sender:webContents,senderFrame:frame}};
 }
 test('IPC only dispatches basic service methods from exact trusted main frame', async () => {
   const h=harness();
-  for (const name of ['session','login','logout','load']) assert.deepEqual(await h.handlers.get('rift:'+name)(h.event),{ok:name});
+  for (const name of ['session','login','checkLogin','logout','load']) {assert.deepEqual(await h.handlers.get('rift:'+name)(h.event),{ok:name});await assert.rejects(h.handlers.get('rift:'+name)(h.event,'renderer-command'),/arguments/);await assert.rejects(h.handlers.get('rift:'+name)({...h.event,sender:{}}),/Untrusted/);}
   const workspace={version:1}; assert.deepEqual(await h.handlers.get('rift:save')(h.event,workspace),{ok:'save'});
   assert.deepEqual(h.calls.at(-1),['save',workspace]);
   for (const event of [{}, {...h.event,sender:{}},{...h.event,senderFrame:{url:indexURL}}, {...h.event,senderFrame:{url:'https://evil.example'}}]) {
@@ -46,10 +46,10 @@ test('sandbox-compatible preload exposes frozen narrow promise bridge without ra
     assert.equal(name,'electron');
     return {contextBridge:{exposeInMainWorld:(name,bridge)=>{assert.equal(name,'rift');exposed=bridge;}},ipcRenderer:{invoke:async (...args)=>{calls.push(args); return 'result';}}};
   }});
-  const methods=['session','login','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup'];
+  const methods=['session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
   assert.deepEqual(Object.keys(exposed).sort(),methods.sort()); assert.ok(Object.isFrozen(exposed));
   for(const name of methods) {
-    const args=['save','openRepository','openTerminal','gitStatus'].includes(name)?['value']:[];
+    const args=name==='ptyStart'?['p']:name==='ptyRead'||name==='ptyClose'?['p','token']:name==='ptyInput'?['p','token','x']:name==='ptyResize'?['p','token',80,24]:['save','openRepository','openTerminal','gitStatus','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];
     assert.equal(await exposed[name](...args),'result'); assert.deepEqual(calls.at(-1),['rift:'+name,...args]);
   }
   await exposed.session('ignored'); assert.deepEqual(calls.at(-1),['rift:session']);
@@ -77,6 +77,7 @@ function fakeElectron({lock=true}={}) {
 }
 test('main boots only local dist with locked down BrowserWindow and denies navigation/windows/permissions', async () => {
   const {start}=require('../desktop/main.cjs'); const h=fakeElectron();
+  let closes=0,disposals=0;const originalService=h.deps.createService;h.deps.createService=options=>({...originalService(options),closeTerminals:()=>closes++,dispose:()=>disposals++});
   process.env.ELECTRON_RENDERER_URL='https://evil.example';
   try {await start(h.electron,h.deps);} finally {delete process.env.ELECTRON_RENDERER_URL;}
   const win=h.windows[0]; assert.equal(win.file,path.resolve(__dirname,'../dist/index.html'));
@@ -93,9 +94,9 @@ test('main boots only local dist with locked down BrowserWindow and denies navig
   assert.equal(session.auth.options.cachePath,path.join('/local/userData','identity.json'));assert.equal(session.store.root,'/local/userData');
   win.emit('ready-to-show');assert.equal(win.shown,true);
   h.electron.app.emit('second-instance');assert.equal(win.restored,true);assert.equal(win.focused,true);
-  win.emit('closed');assert.equal(h.handlers.size,0);
+  win.emit('closed');assert.equal(h.handlers.size,0);assert.equal(closes,1);
   h.electron.app.emit('activate');assert.equal(h.windows.length,2);
-  h.electron.app.emit('will-quit');assert.equal(h.handlers.size,0);
+  h.electron.app.emit('will-quit');assert.equal(h.handlers.size,0);assert.equal(disposals,1);
 });
 test('chooseDirectory uses the native directory-only dialog and handles cancellation', async () => {
   const {start}=require('../desktop/main.cjs');const h=fakeElectron();
@@ -159,6 +160,7 @@ test('import uses a native single-file dialog through trusted zero-argument IPC'
   return ++dialogs===1?{canceled:false,filePaths:[source]}:{canceled:true,filePaths:[]};
  };
  const store=createStore(path.join(root,'app'));store.save(17,emptyWorkspace());
+ h.electron.dialog.showMessageBox=async(win,options)=>{assert.equal(win,h.windows[0]);assert.equal(options.cancelId,0);assert.equal(options.defaultId,0);assert.deepEqual(options.buttons,['Cancel','Restore backup']);assert.match(options.detail,/recovery archive/);return {response:1};};
  await require('../desktop/main.cjs').start(h.electron,{createAuth:()=>({session:async()=>({account:{id:17}})}),createStore:()=>store,createService});
  const win=h.windows[0];const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};const handler=h.handlers.get('rift:importBackup');
  await assert.rejects(handler({...event,senderFrame:{url:indexURL}}),/Untrusted/);

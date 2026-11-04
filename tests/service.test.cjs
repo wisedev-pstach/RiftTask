@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {createService} = require('../desktop/service.cjs');
 
 const workspace = {version:1,categories:[],projects:[],tasks:[],updatedAt:'2026-10-24T00:00:00.000Z'};
+test('cloud bridge methods exist and remain disabled without configured cloud storage',async()=>{const {service}=setup();assert.equal((await service.cloudStatus()).state,'off');await assert.rejects(service.cloudSync({}),/unavailable|disabled/i);});
 function setup(account = {id:17,login:'solo',name:'Solo'}) {
   const calls=[];
   const auth={session:async()=>({account,offline:false,ghAvailable:true}),login:async()=>({account,offline:false,ghAvailable:true}),logout:async()=>{account=null;}};

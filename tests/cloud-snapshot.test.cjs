@@ -8,8 +8,8 @@ test('cloud projection rejects invalid account/repository scope',()=>{
   assert.throws(()=>cloud.projectCloudWorkspace(fixture(),bad),/Invalid cloud scope/);
  }
 });
-test('projection refuses unsupported fields instead of silently dropping future milestone data',()=>{
- for(const add of [w=>w.milestones=[],w=>w.projects[0].milestones=[],w=>w.tasks[0].milestoneId='future']){
+test('projection refuses unsupported fields instead of silently dropping future data',()=>{
+ for(const add of [w=>w.futureField=[],w=>w.projects[0].milestones=[],w=>w.tasks[0].futureField='future']){
   const w=fixture();add(w);assert.throws(()=>cloud.projectCloudWorkspace(w,scope),/Unsupported cloud workspace/);
  }
 });

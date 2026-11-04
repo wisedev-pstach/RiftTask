@@ -17,8 +17,10 @@ function validateWorkspace(input){
  const categoryIds=new Set(categories.map(x=>x.id));
  const projects=read('projects',5000,x=>{if(!categoryIds.has(x.categoryId))invalid('category reference');return {id:id(x.id),categoryId:id(x.categoryId),name:text(x.name,'name',200,true),description:text(x.description,'description',20000),repositoryUrl:repo(x.repositoryUrl),localPath:text(x.localPath,'localPath',4096),archived:bool(x.archived)};});
  const projectIds=new Set(projects.map(x=>x.id));
- const tasks=read('tasks',10000,x=>{if(!projectIds.has(x.projectId))invalid('project reference');return {id:id(x.id),projectId:id(x.projectId),title:text(x.title,'title',300,true),notes:text(x.notes,'notes',20000),status:choice(x.status==='next'?'backlog':x.status,['backlog','doing','done']),priority:choice(x.priority,['low','normal','high']),dueDate:x.dueDate===''?'':date(x.dueDate),today:bool(x.today),createdAt:iso(x.createdAt),completedAt:x.completedAt===null?null:iso(x.completedAt)};});
- const result={version:1,categories,projects,tasks,updatedAt:iso(input.updatedAt)};
+ const milestones=input.milestones===undefined?undefined:read('milestones',10000,x=>{if(!projectIds.has(x.projectId))invalid('milestone project reference');return {id:id(x.id),projectId:id(x.projectId),name:text(x.name,'milestone name',200,true),color:(typeof x.color==='string'&&/^#[0-9a-fA-F]{6}$/.test(x.color))?x.color:invalid('milestone color')};});
+ const milestoneProjects=new Map((milestones||[]).map(m=>[m.id,m.projectId]));
+ const tasks=read('tasks',10000,x=>{if(!projectIds.has(x.projectId))invalid('project reference');const assignment={};if(x.milestoneId!==undefined){if(x.milestoneId!==''&&milestoneProjects.get(id(x.milestoneId))!==x.projectId)invalid('milestone reference');assignment.milestoneId=x.milestoneId;}return {...assignment,id:id(x.id),projectId:id(x.projectId),title:text(x.title,'title',300,true),notes:text(x.notes,'notes',20000),status:choice(x.status==='next'?'backlog':x.status,['backlog','doing','done']),priority:choice(x.priority,['low','normal','high']),dueDate:x.dueDate===''?'':date(x.dueDate),today:bool(x.today),createdAt:iso(x.createdAt),completedAt:x.completedAt===null?null:iso(x.completedAt)};});
+ const result={version:1,categories,projects,...(milestones===undefined?{}:{milestones}),tasks,updatedAt:iso(input.updatedAt)};
  if(Buffer.byteLength(JSON.stringify(result))>MAX_BYTES)invalid('size');return result;
 }
 function createSampleWorkspace(){

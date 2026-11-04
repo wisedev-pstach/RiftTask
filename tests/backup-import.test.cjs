@@ -12,7 +12,7 @@ function fixture(t){
  const store=createStore(path.join(root,'app'));const original=emptyWorkspace();store.save(17,original);
  const source=path.join(root,'backup.json');const incoming=createSampleWorkspace();fs.writeFileSync(source,JSON.stringify(incoming));
  let account={id:17};let selection=source;
- const service=createService({auth:{session:async()=>({account})},store,chooseImportPath:async()=>selection});
+ const service=createService({auth:{session:async()=>({account})},store,chooseImportPath:async()=>selection,confirmRestore:async()=>true});
  return {root,store,original,source,incoming,service,switchAccount:value=>account=value,select:value=>selection=value};
 }
 test('import cancellation leaves the current workspace and backup untouched',async t=>{
@@ -41,9 +41,9 @@ test('import preserves current primary when safety backup cannot be replaced',as
  const before=fs.readFileSync(primary,'utf8');fs.mkdirSync(primary+'.bak');
  await assert.rejects(h.service.importBackup());assert.equal(fs.readFileSync(primary,'utf8'),before);
 });
-test('import retains corrupt current data instead of overwriting it',async t=>{
+test('confirmed import retains a corrupt current original in an owned recovery archive',async t=>{
  const h=fixture(t);const primary=path.join(h.root,'app/accounts/17/workspace.json');fs.writeFileSync(primary,'corrupt original');
- await assert.rejects(h.service.importBackup(),/corrupt/i);assert.equal(fs.readFileSync(primary,'utf8'),'corrupt original');
+ await h.service.importBackup();const archive=fs.readdirSync(path.dirname(primary)).find(n=>n.startsWith('recovery-'));assert.equal(fs.readFileSync(path.join(path.dirname(primary),archive,'workspace.json'),'utf8'),'corrupt original');assert.deepEqual(h.store.load(17),h.incoming);
 });
 test('import restores a validated workspace and retains the previous workspace backup across restart',async t=>{
  const h=fixture(t);assert.deepEqual(await h.service.importBackup(),h.incoming);

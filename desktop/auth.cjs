@@ -6,8 +6,8 @@ function identity(raw){
  if(!raw||!Number.isSafeInteger(raw.id)||raw.id<=0||typeof raw.login!=='string'||!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/.test(raw.login)||raw.name!==null&&raw.name!==undefined&&(typeof raw.name!=='string'||raw.name.length>200||raw.name.includes('\0')))throw new Error('Invalid GitHub identity');
  return {id:raw.id,login:raw.login,name:raw.name||raw.login};
 }
-function createAuth({run=defaultRun,cachePath}={}){
- let cached=null,disconnected=false,ghAvailable=true;
+function createAuth({run=defaultRun,cachePath,launchLogin=require('./login.cjs').launchLogin}={}){
+ let cached=null,disconnected=false,ghAvailable=true,loginPending=false,generation=0;
  if(cachePath){try{if(fs.statSync(cachePath).size<=65536){const data=JSON.parse(fs.readFileSync(cachePath,'utf8'));disconnected=data.disconnected===true;if(!disconnected)cached=identity(data.account);}}catch{}}
  function persist(account,disconnected){
   if(!cachePath)return;
@@ -23,15 +23,30 @@ function createAuth({run=defaultRun,cachePath}={}){
    const unavailable=['ENOENT','ENOTFOUND','EAI_AGAIN','ECONNRESET','ECONNREFUSED','ETIMEDOUT'].includes(error.code)||error.killed===true||/error connecting to api\.github\.com|network is unreachable|temporary failure in name resolution|dial tcp|TLS handshake timeout/i.test(error.stderr||'');
    ghAvailable=error.code!=='ENOENT';
    if(!unavailable){persist(null,false);cached=null;}
-   if(strict)throw new Error('GitHub sign-in could not be verified. Install official gh and run gh auth login --hostname github.com, then retry.');
+   if(strict)throw Object.assign(new Error('GitHub sign-in could not be verified. Install official gh and run gh auth login --hostname github.com, then retry.'),{authRequired:!unavailable&&error.code===1});
    return {account:unavailable?cached:null,offline:unavailable&&cached!==null,ghAvailable};
   }
   persist(account,false);cached=account;disconnected=false;ghAvailable=true;
   return {account,offline:false,ghAvailable:true};
  }
- async function logout(){persist(null,true);cached=null;disconnected=true;return {account:null,offline:false,ghAvailable};}
+ async function login(version){
+  if(version!==generation)throw new Error('Account disconnected during sign-in. Retry.');
+  try{const state=await session(true);loginPending=false;return state;}
+  catch(error){
+   if(!error.authRequired)throw error;
+   // A working shared CLI account must never be replaced just because api user failed.
+   let needsLogin=false;
+   try{await run('gh',['auth','status','--hostname','github.com'],{shell:false,timeout:15000,maxBuffer:65536,windowsHide:true});}
+   catch(statusError){needsLogin=statusError.code===1;}
+   if(!needsLogin)throw error;
+   if(version!==generation)throw new Error('Account disconnected during sign-in. Retry.');
+   if(!loginPending){await launchLogin({isCurrent:()=>version===generation});if(version!==generation)throw new Error('Account disconnected during sign-in. Retry.');loginPending=true;}
+   return {account:null,offline:false,ghAvailable:true,loginPending:true};
+  }
+ }
+ async function logout(){loginPending=false;persist(null,true);cached=null;disconnected=true;return {account:null,offline:false,ghAvailable};}
  let queue=Promise.resolve();
  const serialize=fn=>{const pending=queue.then(fn);queue=pending.catch(()=>{});return pending;};
- return {session:()=>serialize(()=>session(false)),login:()=>serialize(()=>session(true)),logout:()=>serialize(logout)};
+ return {session:()=>serialize(()=>session(false)),checkLogin:()=>serialize(async()=>{try{return await session(true);}finally{loginPending=false;}}),login:()=>{const version=generation;return serialize(()=>login(version));},logout:()=>{generation++;return serialize(logout);}};
 }
 module.exports={createAuth};

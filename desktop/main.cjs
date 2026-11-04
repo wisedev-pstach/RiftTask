@@ -26,13 +26,17 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
   const userData = app.getPath('userData');
   const auth = dependencies.createAuth({cachePath:path.join(userData,'identity.json')});
   const store = dependencies.createStore(userData);
-  const service = dependencies.createService({auth,store,chooseExportPath:async()=>{
+  const service = dependencies.createService({auth,store,cloudRoot:userData,chooseExportPath:async()=>{
     const result=await dialog.showSaveDialog(window,{title:'Export workspace backup',defaultPath:'RiftTask-backup.json',filters:[{name:'JSON workspace',extensions:['json']}],properties:['showOverwriteConfirmation']});
     return result.canceled ? null : result.filePath ?? null;
   },chooseImportPath:async()=>{
     const result=await dialog.showOpenDialog(window,{title:'Import workspace backup',filters:[{name:'JSON workspace',extensions:['json']}],properties:['openFile']});
     return result.canceled ? null : result.filePaths[0] ?? null;
+  },confirmRestore:async()=>{
+    const result=await dialog.showMessageBox(window,{type:'warning',title:'Restore workspace backup?',message:'Replace this account’s workspace with the selected validated backup?',detail:'Existing corrupt primary and rolling backup files will first be copied unchanged into a new recovery archive in this account’s data directory. A healthy current workspace is retained as the rolling safety backup. No other account is changed.',buttons:['Cancel','Restore backup'],defaultId:0,cancelId:0,noLink:true});
+    return result.response===1;
   }});
+  app.on('will-quit',()=>service.dispose?.());
   function fail() {
     dialog.showErrorBox('RiftTask could not start','The local application could not be loaded. Build the app with npm run build, then restart.');
     app.quit();
@@ -59,7 +63,8 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
       return result.canceled ? null : result.filePaths[0] ?? null;
     }});
     current.once('ready-to-show',()=>current.show());
-    current.on('closed',()=>{dispose();dispose=()=>{};window=null;});
+    contents.on('render-process-gone',()=>service.closeTerminals?.());
+    current.on('closed',()=>{service.closeTerminals?.();dispose();dispose=()=>{};window=null;});
     // Never load a dev URL or a renderer URL supplied through the environment.
     current.loadFile(indexFile).catch(fail);
   }

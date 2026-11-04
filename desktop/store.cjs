@@ -33,6 +33,25 @@ function createStore(rootDir){
   if(fs.existsSync(file)||fs.existsSync(file+'.bak')){const previous=load(id);atomicWrite(file+'.bak',JSON.stringify(previous));}
   fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});atomicWrite(file,JSON.stringify(clean));return clean;
  }
- return {load,save};
+ function restore(id,input){
+  const clean=validateWorkspace(input),file=location(id);
+  // Unlike load(), this probe never repairs or writes originals as a side effect.
+  let corrupt=false;
+  try{read(file);}catch(error){if(error.code&&error.code!=='ENOENT')throw error;corrupt=fs.existsSync(file)||fs.existsSync(file+'.bak');}
+  if(!corrupt)return save(id,clean);
+  // Exclusively own a fresh archive, and durably copy EVERY existing original
+  // before the atomic replacement. No archive or user-selected path is reused.
+  const archive=fs.mkdtempSync(path.join(path.dirname(file),'recovery-'));
+  fs.chmodSync(archive,0o700);
+  for(const source of [file,file+'.bak']){
+   if(!fs.existsSync(source))continue;
+   if(!fs.lstatSync(source).isFile())throw new Error('Recovery requires regular account files. Originals retained.');
+   const target=path.join(archive,path.basename(source));
+   fs.copyFileSync(source,target,fs.constants.COPYFILE_EXCL);fs.chmodSync(target,0o600);
+   const fd=fs.openSync(target,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+  }
+  atomicWrite(file,JSON.stringify(clean));return clean;
+ }
+ return {load,save,restore};
 }
 module.exports={createStore,accountId};

@@ -11,6 +11,15 @@ export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[]
 }
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
+ it('starts native login but keeps pending unauthenticated and Check sign-in verification-only',async()=>{
+  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});api.login.mockResolvedValue({account:null,offline:false,ghAvailable:true,loginPending:true});api.checkLogin=vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true});const u=userEvent.setup();render(<App bridge={api}/>);
+  await screen.findByRole('button',{name:'Sign in with GitHub'});await u.click(screen.getByRole('button',{name:'Sign in with GitHub'}));
+  expect(await screen.findByText(/Sign-in terminal opened/)).toBeInTheDocument();expect(api.load).not.toHaveBeenCalled();expect(api.login).toHaveBeenCalledOnce();
+  await u.click(screen.getByRole('button',{name:'Check sign-in'}));await screen.findByRole('heading',{name:'Projects'});expect(api.checkLogin).toHaveBeenCalledOnce();expect(api.login).toHaveBeenCalledOnce();
+ });
+ it('permits an explicit login retry after a failed Check sign-in without automatically launching again',async()=>{
+ const api=bridge();api.session.mockResolvedValue({account:null,ghAvailable:true});api.login.mockResolvedValue({account:null,ghAvailable:true,loginPending:true});api.checkLogin=vi.fn().mockRejectedValue(new Error('Sign-in not verified'));const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('button',{name:'Sign in with GitHub'});await u.click(screen.getByRole('button',{name:'Sign in with GitHub'}));expect(screen.getByRole('button',{name:'Sign in with GitHub'})).toBeDisabled();await u.click(screen.getByRole('button',{name:'Check sign-in'}));await screen.findByRole('alert');expect(screen.getByRole('button',{name:'Sign in with GitHub'})).toBeEnabled();expect(api.login).toHaveBeenCalledOnce();
+ });
  it('defaults to project tiles with explicit live-status counts, not a mixed task list',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'other',name:'Other project'});
  w.tasks=['doing','backlog','done'].map((status,index)=>({id:`t${index}`,projectId:'project',title:`Private ${status}`,notes:'',status,priority:'normal',today:false}));
@@ -46,14 +55,14 @@ describe('workspace',()=>{
  expect(screen.getByRole('tab',{name:'Tasks'})).toHaveAttribute('aria-selected','true');
  expect(screen.queryByRole('button',{name:'Edit project'})).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Open repository'})).not.toBeInTheDocument();
- expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Tasks','Project details']);
+ expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Tasks','Milestones','Project details']);
  await u.click(screen.getByRole('tab',{name:'Project details'}));
  const details=screen.getByRole('tabpanel',{name:'Project details'});
  expect(within(details).getByRole('button',{name:'Edit project'})).toBeInTheDocument();
  expect(within(details).getByRole('button',{name:'Open repository'})).toBeInTheDocument();
- expect(within(details).getByRole('button',{name:'Open external terminal (interim)'})).toBeInTheDocument();
+ expect(within(details).queryByRole('button',{name:'Open external terminal (interim)'})).not.toBeInTheDocument();
  expect(within(details).getByRole('button',{name:'Check Git status'})).toBeInTheDocument();
- expect(screen.getByText(/Embedded terminal is not implemented/)).toBeInTheDocument();
+ expect(screen.getByRole('region',{name:'Project terminal'})).toBeInTheDocument();
  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
  await u.click(screen.getByRole('tab',{name:'Tasks'}));
  expect(screen.getByRole('tabpanel',{name:'Tasks'})).toBeInTheDocument();
@@ -120,10 +129,10 @@ describe('workspace',()=>{
  await waitFor(()=>expect(api.save).toHaveBeenCalledOnce());await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
  expect(screen.getByRole('button',{name:'Archived game In progress 1 To do 0'})).toBeInTheDocument();expect(api.save.mock.lastCall[0].tasks).toEqual(w.tasks);
  });
- it('supports keyboard navigation between the two real project feature tabs',async()=>{
+ it('supports keyboard navigation between all project feature tabs',async()=>{
  const u=userEvent.setup();render(<App bridge={bridge(populated())}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  const tasks=screen.getByRole('tab',{name:'Tasks'}),details=screen.getByRole('tab',{name:'Project details'});
- tasks.focus();await u.keyboard('{ArrowRight}');expect(details).toHaveFocus();expect(details).toHaveAttribute('aria-selected','true');expect(tasks).toHaveAttribute('tabindex','-1');
+ tasks.focus();await u.keyboard('{ArrowRight}');expect(screen.getByRole('tab',{name:'Milestones'})).toHaveFocus();await u.keyboard('{ArrowRight}');expect(details).toHaveFocus();expect(details).toHaveAttribute('aria-selected','true');expect(tasks).toHaveAttribute('tabindex','-1');
  await u.keyboard('{Home}');expect(tasks).toHaveFocus();expect(tasks).toHaveAttribute('aria-selected','true');
  await u.keyboard('{End}');expect(details).toHaveFocus();await u.keyboard('{ArrowRight}');expect(tasks).toHaveFocus();
  });
@@ -143,7 +152,7 @@ describe('workspace',()=>{
  // Match the real marker selectors against the rendered headings; jsdom does not paint pseudo-elements.
  const markerSelectors=[...style.sheet.cssRules].filter(rule=>rule.selectorText?.includes('.board-column')&&rule.selectorText.endsWith('::before')).map(rule=>rule.selectorText.replace(/::before$/,''));
  expect(markerSelectors.length).toBeGreaterThan(0);
- expect(screen.getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
+ expect(within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
  }finally{style.remove();}
  });
  it('renders exactly three ordered board regions on a three-column grid and moves tasks without losing fields',async()=>{
@@ -151,7 +160,7 @@ describe('workspace',()=>{
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.click(screen.getByRole('button',{name:'Board'}));
- const regions=screen.getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
+ const regions=within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
  for(const [index,status] of ['backlog','doing','done'].entries()){
  expect(within(regions[index]).getByRole('button',{name:`Edit task Task ${status}`})).toBeInTheDocument();
  expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','done']);
@@ -246,9 +255,9 @@ describe('workspace',()=>{
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));expect(screen.getByRole('button',{name:'lose.DOT In progress 1 To do 0'})).toBeInTheDocument();
  });
  it('explains missing GitHub CLI and offers check sign-in after verification fails',async()=>{
- const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:false});api.login.mockRejectedValueOnce(new Error('Finish sign-in in your terminal'));
+ const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:false});api.checkLogin=vi.fn().mockRejectedValueOnce(new Error('Finish sign-in in your terminal')).mockResolvedValue({account,offline:false,ghAvailable:true});
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Your work, on this device.'});
- expect(screen.getByText('GitHub CLI is required. Install gh, then check sign-in.')).toBeInTheDocument();
+ expect(screen.getByText('GitHub CLI is required. Install gh and run gh auth login --hostname github.com --git-protocol https --web in your terminal, then check sign-in.')).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Check sign-in'}));expect(await screen.findByRole('alert')).toHaveTextContent('Finish sign-in in your terminal');
  await u.click(screen.getByRole('button',{name:'Check sign-in'}));expect(await screen.findByRole('heading',{name:'Projects'})).toBeInTheDocument();
  });
@@ -265,6 +274,13 @@ describe('workspace',()=>{
  expect(await screen.findByText('Offline — using your last verified account. Data stays on this device.')).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Disconnect account'}));
  expect(await screen.findByRole('heading',{name:'Your work, on this device.'})).toBeInTheDocument();expect(api.logout).toHaveBeenCalledOnce();
+ });
+ it('allows exported-backup recovery in load-error state only after explicit consent, without seeding or saving',async()=>{
+ const api=bridge();api.load.mockRejectedValue(new Error('Workspace is corrupt. Original files retained.'));const restored=populated();api.importBackup.mockResolvedValueOnce(null).mockResolvedValueOnce(restored);const u=userEvent.setup();render(<App bridge={api}/>);
+ await screen.findByRole('alert');expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();expect(screen.getByRole('dialog')).toHaveTextContent(/corrupt originals.*recovery archive/i);await u.click(screen.getByRole('button',{name:'Cancel'}));expect(api.importBackup).not.toHaveBeenCalled();
+ await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));await screen.findByRole('button',{name:'lose.DOT In progress 0 To do 0'});expect(api.save).not.toHaveBeenCalled();
  });
  it('recovers from load failure without replacing data with an empty workspace',async()=>{
  const api=bridge();api.load.mockRejectedValueOnce(new Error('Workspace unreadable'));
@@ -286,7 +302,7 @@ describe('workspace',()=>{
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT'}));await u.click(screen.getByRole('tab',{name:'Project details'}));
  await u.click(screen.getByRole('button',{name:'Open repository'}));expect(api.openRepository).toHaveBeenCalledWith('https://github.com/test/game');
- await u.click(screen.getByRole('button',{name:'Open external terminal (interim)'}));expect(api.openTerminal).toHaveBeenCalledWith('project');
+ expect(api.openTerminal).not.toHaveBeenCalled(); // External launcher is no longer the project terminal UI.
  await u.click(screen.getByRole('button',{name:'Edit project'}));await u.click(screen.getByRole('button',{name:'Choose directory'}));
  await waitFor(()=>expect(screen.getByLabelText('Local directory')).toHaveValue('/work/game'));await u.click(screen.getByRole('button',{name:'Cancel'}));
  await u.click(screen.getByRole('button',{name:'Export backup'}));await screen.findByText('Backup exported.');expect(api.exportBackup).toHaveBeenCalledOnce();
@@ -378,6 +394,7 @@ describe('workspace',()=>{
  expect(await screen.findByRole('button',{name:'Edit category Development'})).toBeInTheDocument();
  expect(api.save.mock.lastCall[0].projects[0].categoryId).toBe(api.save.mock.lastCall[0].categories[0].id);
  });
+ it('opens wired cloud settings without syncing or preventing local-only work',async()=>{const api=bridge();api.cloudStatus=vi.fn().mockResolvedValue({state:'off'});const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'Cloud persistence'}));expect(await screen.findByRole('heading',{name:'Manual cloud persistence'})).toBeInTheDocument();expect(api.cloudStatus).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'New category'})).toBeEnabled();});
  it('requires sign-in before loading and opens the empty local workspace after verification',async()=>{
  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});
  render(<App bridge={api}/>);
