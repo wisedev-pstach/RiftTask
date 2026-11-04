@@ -19,6 +19,7 @@ Options:
   --dry-run      Alias for --check
   --source       Compatibility flag; this preview always builds fresh source
   --dest <dir>   Exact NEW app directory (macOS: must end in .app)
+  --ref <sha>    Build exactly this full 40-character commit from the private repo
   --help, -h     Show this help message
 EOF
 }
@@ -26,9 +27,15 @@ EOF
 CHECK_ONLY=false
 
 CUSTOM_DEST=""
+SOURCE_COMMIT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --ref)
+      [[ $# -ge 2 && "$2" =~ ^[0-9a-f]{40}$ ]] || { echo 'Error: --ref requires a full lowercase 40-character commit SHA.' >&2; exit 1; }
+      SOURCE_COMMIT="$2"
+      shift 2
+      ;;
     --check|--dry-run)
       CHECK_ONLY=true
       shift
@@ -189,6 +196,14 @@ echo "Cloning $REPO at feat/cloud-persistence..."
 gh repo clone "$REPO" "$BUILD_DIR" -- --depth=1 --branch feat/cloud-persistence
 
 cd "$BUILD_DIR"
+if [[ -n "$SOURCE_COMMIT" ]]; then
+  # Per-command official gh credential helper; do not alter shared Git config
+  # or put a token in argv, URLs, output or the working tree.
+  git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch --depth=1 origin "$SOURCE_COMMIT"
+  git checkout --detach "$SOURCE_COMMIT"
+  [[ "$(git rev-parse HEAD)" == "$SOURCE_COMMIT" ]] || { echo 'Error: source commit mismatch; stopped.' >&2; exit 1; }
+  echo "Building exact source commit: $SOURCE_COMMIT"
+fi
 
 echo "Building RiftTask from source..."
 npm ci --no-audit --no-fund

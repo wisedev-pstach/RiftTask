@@ -11,11 +11,14 @@ export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[]
 }
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
- it('explains manual CLI sign-in and optional cloud without promising an automatic login launch',async()=>{
-  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});render(<App bridge={api}/>);
-  expect(await screen.findByText(/gh auth login --hostname github.com/)).toBeInTheDocument();
-  expect(screen.getByText(/optional manual cloud sync/i)).toBeInTheDocument();
-  expect(screen.queryByText(/Your browser or native terminal will handle GitHub sign-in/)).not.toBeInTheDocument();
+ it('starts native login but keeps pending unauthenticated and Check sign-in verification-only',async()=>{
+  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:true});api.login.mockResolvedValue({account:null,offline:false,ghAvailable:true,loginPending:true});api.checkLogin=vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true});const u=userEvent.setup();render(<App bridge={api}/>);
+  await screen.findByRole('button',{name:'Sign in with GitHub'});await u.click(screen.getByRole('button',{name:'Sign in with GitHub'}));
+  expect(await screen.findByText(/Sign-in terminal opened/)).toBeInTheDocument();expect(api.load).not.toHaveBeenCalled();expect(api.login).toHaveBeenCalledOnce();
+  await u.click(screen.getByRole('button',{name:'Check sign-in'}));await screen.findByRole('heading',{name:'Projects'});expect(api.checkLogin).toHaveBeenCalledOnce();expect(api.login).toHaveBeenCalledOnce();
+ });
+ it('permits an explicit login retry after a failed Check sign-in without automatically launching again',async()=>{
+ const api=bridge();api.session.mockResolvedValue({account:null,ghAvailable:true});api.login.mockResolvedValue({account:null,ghAvailable:true,loginPending:true});api.checkLogin=vi.fn().mockRejectedValue(new Error('Sign-in not verified'));const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('button',{name:'Sign in with GitHub'});await u.click(screen.getByRole('button',{name:'Sign in with GitHub'}));expect(screen.getByRole('button',{name:'Sign in with GitHub'})).toBeDisabled();await u.click(screen.getByRole('button',{name:'Check sign-in'}));await screen.findByRole('alert');expect(screen.getByRole('button',{name:'Sign in with GitHub'})).toBeEnabled();expect(api.login).toHaveBeenCalledOnce();
  });
  it('defaults to project tiles with explicit live-status counts, not a mixed task list',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'other',name:'Other project'});
@@ -252,7 +255,7 @@ describe('workspace',()=>{
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));expect(screen.getByRole('button',{name:'lose.DOT In progress 1 To do 0'})).toBeInTheDocument();
  });
  it('explains missing GitHub CLI and offers check sign-in after verification fails',async()=>{
- const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:false});api.login.mockRejectedValueOnce(new Error('Finish sign-in in your terminal'));
+ const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:false});api.checkLogin=vi.fn().mockRejectedValueOnce(new Error('Finish sign-in in your terminal')).mockResolvedValue({account,offline:false,ghAvailable:true});
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Your work, on this device.'});
  expect(screen.getByText('GitHub CLI is required. Install gh and run gh auth login --hostname github.com --git-protocol https --web in your terminal, then check sign-in.')).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Check sign-in'}));expect(await screen.findByRole('alert')).toHaveTextContent('Finish sign-in in your terminal');
@@ -271,6 +274,13 @@ describe('workspace',()=>{
  expect(await screen.findByText('Offline — using your last verified account. Data stays on this device.')).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Disconnect account'}));
  expect(await screen.findByRole('heading',{name:'Your work, on this device.'})).toBeInTheDocument();expect(api.logout).toHaveBeenCalledOnce();
+ });
+ it('allows exported-backup recovery in load-error state only after explicit consent, without seeding or saving',async()=>{
+ const api=bridge();api.load.mockRejectedValue(new Error('Workspace is corrupt. Original files retained.'));const restored=populated();api.importBackup.mockResolvedValueOnce(null).mockResolvedValueOnce(restored);const u=userEvent.setup();render(<App bridge={api}/>);
+ await screen.findByRole('alert');expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();expect(screen.getByRole('dialog')).toHaveTextContent(/corrupt originals.*recovery archive/i);await u.click(screen.getByRole('button',{name:'Cancel'}));expect(api.importBackup).not.toHaveBeenCalled();
+ await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();
+ await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));await screen.findByRole('button',{name:'lose.DOT In progress 0 To do 0'});expect(api.save).not.toHaveBeenCalled();
  });
  it('recovers from load failure without replacing data with an empty workspace',async()=>{
  const api=bridge();api.load.mockRejectedValueOnce(new Error('Workspace unreadable'));

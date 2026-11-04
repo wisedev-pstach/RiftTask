@@ -32,6 +32,9 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
   },chooseImportPath:async()=>{
     const result=await dialog.showOpenDialog(window,{title:'Import workspace backup',filters:[{name:'JSON workspace',extensions:['json']}],properties:['openFile']});
     return result.canceled ? null : result.filePaths[0] ?? null;
+  },confirmRestore:async()=>{
+    const result=await dialog.showMessageBox(window,{type:'warning',title:'Restore workspace backup?',message:'Replace this account’s workspace with the selected validated backup?',detail:'Existing corrupt primary and rolling backup files will first be copied unchanged into a new recovery archive in this account’s data directory. A healthy current workspace is retained as the rolling safety backup. No other account is changed.',buttons:['Cancel','Restore backup'],defaultId:0,cancelId:0,noLink:true});
+    return result.response===1;
   }});
   app.on('will-quit',()=>service.dispose?.());
   function fail() {

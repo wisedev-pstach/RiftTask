@@ -1,6 +1,6 @@
 'use strict';
 
-const BASIC_METHODS = Object.freeze({ptyStart:1,ptyRead:2,ptyInput:3,ptyResize:4,ptyClose:2,cloudStatus:0,cloudVerify:1,cloudEnable:1,cloudDisable:0,cloudSync:1,session:0,login:0,logout:0,load:0,save:1,exportBackup:0,importBackup:0,gitStatus:1,openTerminal:1});
+const BASIC_METHODS = Object.freeze({ptyStart:1,ptyRead:2,ptyInput:3,ptyResize:4,ptyClose:2,cloudStatus:0,cloudVerify:1,cloudEnable:1,cloudDisable:0,cloudSync:1,session:0,login:0,checkLogin:0,logout:0,load:0,save:1,exportBackup:0,importBackup:0,gitStatus:1,openTerminal:1});
 
 function repositoryURL(value) {
   const invalid = () => {throw new Error('Invalid repository URL. Use an HTTPS GitHub or Azure DevOps repository URL.');};

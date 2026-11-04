@@ -23,6 +23,9 @@
 .PARAMETER Dest
     Custom installation directory (default: %LOCALAPPDATA%\Programs\RiftTask).
 
+.PARAMETER Ref
+    Optional full lowercase 40-character source commit SHA. Fetches and verifies it before building.
+
 .PARAMETER Help
     Displays usage and help.
 #>
@@ -32,10 +35,12 @@ param(
     [switch]$DryRun,
     [switch]$Source,
     [string]$Dest,
+    [string]$Ref,
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Ref -and $Ref -cnotmatch '^[0-9a-f]{40}$') { throw '-Ref requires a full lowercase 40-character commit SHA.' }
 
 # Native failures do not reliably throw in Windows PowerShell 5.1.
 function Invoke-Native {
@@ -146,6 +151,14 @@ try {
     Invoke-Native gh @('repo', 'clone', $Repo, $BuildDir, '--', '--depth=1', '--branch', $SourceRef)
     Push-Location -LiteralPath $BuildDir
     $PushedLocation = $true
+    if ($Ref) {
+        # Scoped official gh helper, not a shared credential/config change.
+        Invoke-Native git @('-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential', 'fetch', '--depth=1', 'origin', $Ref)
+        Invoke-Native git @('checkout', '--detach', $Ref)
+        $ActualCommit = (Invoke-Native git @('rev-parse', 'HEAD')).Trim()
+        if ($ActualCommit -cne $Ref) { throw 'Source commit mismatch; stopped.' }
+        Write-Host "Building exact source commit: $Ref"
+    }
 
     Write-Host "Building RiftTask from source..." -ForegroundColor Cyan
     Invoke-Native npm @('ci', '--no-audit', '--no-fund')

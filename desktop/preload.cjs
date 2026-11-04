@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('rift',Object.freeze({
   ptyClose:(project,id)=>ipcRenderer.invoke('rift:ptyClose',project,id),
   session:()=>ipcRenderer.invoke('rift:session'),
   login:()=>ipcRenderer.invoke('rift:login'),
+  checkLogin:()=>ipcRenderer.invoke('rift:checkLogin'),
   logout:()=>ipcRenderer.invoke('rift:logout'),
   load:()=>ipcRenderer.invoke('rift:load'),
   save:workspace=>ipcRenderer.invoke('rift:save',workspace),

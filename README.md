@@ -4,7 +4,7 @@ A desktop workspace for the projects you work on after work.
 
 Organize **categories → projects → your own tasks**. Keep the next action visible without importing a second backlog from GitHub or Azure DevOps.
 
-> **Status: source-build preview; release scope is not complete.** Manual cloud storage and Linux PTY behavior have real-path evidence; Windows/macOS installation and GUI acceptance remain open. See [final scope](docs/FINAL-SCOPE.md), [build state](docs/BUILD-STATE.md) and the evidence files under `docs/`.
+> **Status: functional source-build preview; native owner testing remains.** In-app native GitHub CLI sign-in initiation and non-destructive exported-backup recovery are implemented. Manual cloud storage and Linux PTY behavior have real-path evidence; Windows/macOS installation and GUI acceptance remain unverified, not prerequisites to publishing this source handoff. See [functional evidence](docs/functional-completion-evidence.md), [final scope](docs/FINAL-SCOPE.md) and [build state](docs/BUILD-STATE.md).
 
 ## Product direction
 
@@ -14,7 +14,7 @@ Organize **categories → projects → your own tasks**. Keep the next action vi
 - Account-scoped local persistence, atomic writes and recoverable backups.
 - Project-first tiles/counts, milestone labels/task assignments and milestone completion view.
 - GitHub / Azure DevOps repository links, local Git context, and an explicitly started bottom-docked terminal retaining per-project sessions. No automatic provider issue/task importing or project command execution.
-- Windows/macOS packages and authenticated one-command installation from this private repository, once platform builds have been verified.
+- Authenticated one-command Windows/macOS **source-build bootstrap** from this private repository; native packages/install/launch still require the owner's platform checks.
 
 ## Data and authentication
 
@@ -23,6 +23,10 @@ RiftTask is **local-first, with optional manual cloud sync**. Each verified nume
 GitHub tokens stay with the official CLI; the renderer never receives them. The terminal's narrowly scoped bridge permits interactive shell input only after explicit start, under your OS permissions; it is not a command sandbox. Sign-in alone does not enable cloud transfer. Use **Cloud persistence → verify dedicated repository → consent → Sync now**; pulls require confirmation and conflicting copies are not overwritten. Cloud snapshots preserve tasks/milestones but exclude device paths and terminal output. Private Git history is plaintext, not end-to-end encrypted; anyone with repository read access can read it, and disabling sync does not erase history. Real GitHub transfer between two local stores was verified with dummy data; two physical native devices remain unverified. See [cloud evidence](docs/cloud-live-evidence.md).
 
 ## Development
+
+In the desktop app, **Sign in with GitHub** first verifies/reuses an existing CLI account. Only when the CLI reports no working login does it start the fixed official `gh auth login --hostname github.com --git-protocol https --web` flow in Terminal (macOS) or Windows PowerShell. Finish the terminal/browser prompts, then **Check sign-in** (verification only). Opening a terminal is **pending, not authenticated**. A failed check permits an explicit retry; it never automatically launches another login. Linux, missing CLI, or a denied native-terminal launch gives the manual command below. No shared `gh auth logout`, scope expansion, or token-returning bridge is used.
+
+If workspace loading fails, **Import backup** remains available; **Export backup** and editing stay disabled. Choose an existing exported JSON backup (regular file, at most 8 MiB, valid v1 schema) and confirm the native restore dialog. For a corrupt primary, **both existing primary and rolling backup** are copied byte-for-byte into a uniquely created `accounts/<verified numeric ID>/recovery-<random>/` archive before atomic replacement. These archives are never rotated or deleted by RiftTask. Cancellation, validation/account-change errors and pre-replacement write failures preserve both originals. Keep the archives and original export; never delete corrupt files just to make loading succeed.
 
 Use Node.js 24.15+ (24.x LTS) or 26+ and npm. Install the official [GitHub CLI](https://cli.github.com/) and sign in on **your own computer**:
 
@@ -55,29 +59,22 @@ Prerequisites on **your own computer**:
 
 ### macOS / Linux — Bash
 
-From a directory where `RiftTask-source-preview` does **not** already exist:
+After the reviewed changes are pushed to private `feat/cloud-persistence`, run this **one shell command** from a directory where `RiftTask-source-preview` does **not** already exist:
 
 ```sh
-gh repo clone wisedev-pstach/RiftTask RiftTask-source-preview -- --depth=1 --branch feat/cloud-persistence &&
-bash RiftTask-source-preview/scripts/install.sh --check &&
-bash RiftTask-source-preview/scripts/install.sh
+test ! -e RiftTask-source-preview && test ! -L RiftTask-source-preview && gh repo clone wisedev-pstach/RiftTask RiftTask-source-preview -- --depth=1 --branch feat/cloud-persistence && ref="$(git -C RiftTask-source-preview rev-parse HEAD)" && bash RiftTask-source-preview/scripts/install.sh --ref "$ref"
 ```
 
-The bootstrap **always clones a fresh `feat/cloud-persistence` build tree**, even when invoked from a checkout; it does not build or modify that checkout. This is an explicit **moving feature branch**, not an immutable signed release or commit pin. Do not substitute default `main`: it may lack the current feature/bootstrap.
+The initial authenticated clone selects the **moving feature branch**, then captures its full commit SHA. `--ref` fetches, checks out detached, verifies and prints that exact commit in a separate fresh build tree; a branch advance during the build cannot silently change the built revision. Keep the printed SHA for reporting. This is reproducible source selection, **not signed release provenance**. The implementation starts at known base `126f4a87f2326c3722653d5d54566744f4b70178` plus the functional changes published by the parent; pinning only that older base omits them. Do not substitute default `main`: it may lack the current feature/bootstrap. For a supplied reviewed full SHA use `--ref '<40-character lowercase SHA>'` / `-Ref '<SHA>'`; unsupported or unavailable refs fail closed.
 
 Defaults: macOS `~/Applications/RiftTask.app`; Linux `~/.local/share/rifttask` with launcher `~/.local/bin/rifttask` (add that directory to your `PATH` yourself if needed). `--dest '/absolute/new/path'` means the **exact final application directory**, not a parent; on macOS it must end in `.app`.
 
 ### Windows — PowerShell (native validation pending)
 
-Use a normal PowerShell session whose existing policy permits local scripts. These explicit exit checks stop the recipe after a failed clone or check:
+Use a normal PowerShell session whose existing policy permits local scripts. This is **one PowerShell command** (the `& { ... }` block); every native failure stops the handoff:
 
 ```powershell
-gh repo clone wisedev-pstach/RiftTask RiftTask-source-preview -- --depth=1 --branch feat/cloud-persistence
-if ($LASTEXITCODE -ne 0) { throw 'Source clone failed' }
-powershell -NoProfile -File .\RiftTask-source-preview\scripts\install.ps1 -Check
-if ($LASTEXITCODE -ne 0) { throw 'Prerequisite check failed' }
-powershell -NoProfile -File .\RiftTask-source-preview\scripts\install.ps1
-if ($LASTEXITCODE -ne 0) { throw 'Source build/install failed' }
+& { $ErrorActionPreference = 'Stop'; if (Get-Item -LiteralPath RiftTask-source-preview -Force -ErrorAction SilentlyContinue) { throw 'Source destination exists; choose a new directory' }; gh repo clone wisedev-pstach/RiftTask RiftTask-source-preview -- --depth=1 --branch feat/cloud-persistence; if ($LASTEXITCODE -ne 0) { throw 'Source clone failed' }; $Ref = git -C RiftTask-source-preview rev-parse HEAD; if ($LASTEXITCODE -ne 0) { throw 'Source revision failed' }; powershell -NoProfile -File .\RiftTask-source-preview\scripts\install.ps1 -Ref $Ref; if ($LASTEXITCODE -ne 0) { throw 'Source build/install failed' } }
 ```
 
 Default: `%LOCALAPPDATA%\Programs\RiftTask`. `-Dest 'C:\absolute\new\path'` selects the exact final directory. No shared Desktop/Start Menu shortcuts are created by this preview. Launch the resulting `RiftTask.exe` directly after native validation; the bootstrap does not launch the app automatically.
@@ -96,4 +93,4 @@ Core tests: `npm run test:core` (Node's built-in runner). Renderer tests: `npm r
 
 Native Windows/macOS behavior is only considered verified after execution on those operating systems; Linux unit/build success is not evidence that their installers work.
 
-Sign-in currently verifies a CLI account; it does **not** launch the authentication flow. Complete the `gh auth login` command above first. If both the current workspace and its rolling backup are corrupt, the app preserves them and blocks replacement; self-service recovery from an exported backup is not yet available in that state. Never delete originals to force a test to pass.
+The owner performs native macOS/Windows testing after the parent publishes the reviewed private branch. The implementation is not withheld pending those manual tests. No prebuilt release, signing/notarization, security bypass or native-platform success is implied by the source commands or browser screenshots.

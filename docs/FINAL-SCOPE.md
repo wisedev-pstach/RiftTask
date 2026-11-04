@@ -1,15 +1,15 @@
 # RiftTask v0.1 — frozen scope and acceptance
 
-Finalization means closing the existing request, not adding features. This is a source-build preview, not a completed release. Scheduling a bounded batch or passing tests does not close the product acceptance gates below.
+Finalization means implementing the existing request, not adding features. This is a functional source-build preview, not a completed signed release. The owner will perform manual native testing; those checks are not a prerequisite to handing over the completed implementation. Source publication remains subject to parent review.
 
 ## Existing feature set
 
 - Categories → project tiles → manually maintained tasks; Backlog/In progress/Done, priorities, due dates, notes, Today/search/list/board. Legacy `next` migrates to backlog.
 - Project milestone labels, task assignment and completion counts. Label deletion is not delivered.
-- Verified numeric GitHub identity, local account-separated persistence, offline resume and app-local disconnect. GitHub authentication uses the official CLI; users must run `gh auth login --hostname github.com --git-protocol https --web` themselves before the app verifies sign-in.
+- Verified numeric GitHub identity, local account-separated persistence, offline resume and app-local disconnect. Sign in reuses a working official CLI account or initiates fixed `gh auth login --hostname github.com --git-protocol https --web` in macOS Terminal / Windows PowerShell. Linux/manual fallback is actionable. A launched terminal is pending, never authenticated; Check sign-in only verifies, with explicit retry after failure. No shared CLI logout, renderer commands or returned tokens.
 - GitHub/Azure DevOps repository links, local directory selection, explicit local Git status. No provider issue/task imports, build/artifact upload or automatic project commands.
 - Explicit-start bottom-docked per-project PTY sessions retained while navigating tabs/projects; stopped/invalidated on account/path/lifecycle changes. Full OS-user shell, not a sandbox; terminal output is not cloud data.
-- Local backup export/import and rolling safety copy. If both primary and rolling copy are corrupt, originals remain preserved and self-service restore is currently blocked.
+- Local backup export/import and rolling safety copy. Load-error UI permits import of a bounded, schema-validated exported backup, with default-cancel native confirmation. For corrupt primary, both existing originals are copied unchanged into a uniquely owned account-derived recovery archive before atomic restore; cancellation, validation/identity-generation failures and archive/write failure preserve original bytes. Archives are never rotated/deleted by the app. No silent empty-workspace seeding.
 - Optional **manual** cloud sync to a separate initialized personal private GitHub data repository. Categories/projects/tasks/milestones sync; device paths stay local. Confirmed downloads, exact readback and expected-SHA writes; conflicts stop instead of merge/overwrite. No automatic/background sync or E2EE. Private Git history is readable by repository-authorized credentials and retains previous content.
 
 ## Evidence already available
@@ -18,7 +18,7 @@ Core/renderer automated tests; real scratch filesystem/Git/native Linux PTY chec
 
 ## Release acceptance still open
 
-1. Actual macOS AND Windows source-build/package/install/launch. Current bootstraps are source-build previews, not release download installers; no signed/notarized binaries or verified one-command release install exists.
+1. Owner's actual macOS AND Windows source-build/package/install/launch. Authenticated one-command source bootstraps are implemented, with full-SHA capture/fetch/detached-checkout verification and no overwrite/security bypass. They are not prebuilt release download installers; no signed/notarized binaries or verified one-command release install exists.
 2. On each native OS: identity/CLI discovery, project/task/milestone CRUD, account restart/isolation, directory/open-link/native backup dialogs, retained PTY input/resize/navigation/cleanup, and opt-in cloud with synthetic data.
 3. Two physical devices exchanging cloud updates/conflicts safely. Existing real-cloud evidence uses local processes/stores, not physical devices.
 4. Native build CI and artifact provenance/checksums. Existing credential lacks workflow scope; do not expand it or bypass denial. No remote CI success is claimed.

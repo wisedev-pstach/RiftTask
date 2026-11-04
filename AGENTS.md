@@ -11,7 +11,8 @@ Load test-driven-development. Implement vertical slices: write a failing behavio
 ## Bridge contract (window.rift)
 All methods return Promises. Renderer MUST NOT import Node.
 - session(): {account: {id:number,login:string,name:string}|null, offline:boolean, ghAvailable:boolean}
-- login(): same as session; main process starts gh auth login in native terminal if needed, then verifies via gh api user. UI can offer a 'Check sign-in' retry.
+- login(): session shape, or {account:null,offline:false,ghAvailable:true,loginPending:true}; main process reuses a verified CLI account or starts fixed gh auth login in a native terminal on macOS/Windows. Launch is not authentication; Linux/errors provide a manual fallback.
+- checkLogin(): strictly verifies gh api user without launching authentication or accepting offline identity; resets pending launch so a failed check permits explicit retry.
 - logout(): disconnect app locally only; do not revoke shared gh authentication.
 - load(): Workspace (requires active account)
 - save(workspace): validated persisted Workspace

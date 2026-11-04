@@ -24,7 +24,7 @@ function readBackup(source){
   try{return validateWorkspace(JSON.parse(text));}
   catch{throw new Error('Invalid backup. A valid version-1 RiftTask workspace is required; no data was replaced.');}
 }
-function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,cloudRoot,cloudTransport,ptySpawn}) {
+function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,confirmRestore=async()=>false,cloudRoot,cloudTransport,ptySpawn}) {
   let boundAccount=null,generation=0,terminalAccount=null,terminalBlocked=false,disconnecting=false;
   const pty=require('./pty.cjs').createPty({spawn:ptySpawn,resolve:async projectId=>{
     if(typeof projectId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId))throw new Error('Invalid project ID.');
@@ -67,6 +67,7 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
     cloudStatus:async()=>cloud?cloud.status():{state:'off'},
     cloudVerify:cloudCall('verify'),cloudEnable:cloudCall('enable'),cloudDisable:cloudCall('disable'),cloudSync:cloudCall('sync'),
     session:()=>refresh('session'),
+    checkLogin:()=>refresh('checkLogin'),
     login:()=>refresh('login'),
     logout:async()=>{generation++;pty.reset();terminalAccount=null;terminalBlocked=true;disconnecting=true;try{const state=await auth.logout();boundAccount=null;return state;}finally{disconnecting=false;}},
     exportBackup:async()=>{
@@ -96,12 +97,19 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
     },
     importBackup:async()=>{
       const id=await accountId();
+      const version=generation;
+      const verify=async()=>{if(await accountId()!==id||version!==generation||disconnecting)throw new Error('GitHub account changed. Retry backup import.');};
       const source=await chooseImportPath();
       if(!source)return null;
-      if(await accountId()!==id)throw new Error('GitHub account changed. Retry backup import.');
+      await verify();
       const workspace=readBackup(source);
-      if(await accountId()!==id)throw new Error('GitHub account changed. Retry backup import.');
-      const saved=await store.save(id,workspace);await pty.audit();return saved;
+      await verify();
+      if(await confirmRestore()!==true)return null;
+      await verify();
+      let saved;
+      try{saved=await store.restore(id,workspace);}
+      catch{throw new Error('Could not restore backup. Existing originals retained; check disk space and account-directory permissions, then retry. A partial recovery archive may remain; do not delete original files.');}
+      await pty.audit();return saved;
     },
     load:async()=>store.load(await accountId()),
     save:async(workspace)=>{const saved=await store.save(await accountId(),workspace);await pty.audit();return saved;},
