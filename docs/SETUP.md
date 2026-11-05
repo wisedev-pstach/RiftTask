@@ -34,7 +34,7 @@ The commands download and execute the setup script, then build public `main` in 
 ### 4. Open the installed app and sign in
 
 - **Mac:** in Finder, open **Home → Applications → RiftTask.app** (`~/Applications/RiftTask.app`).
-- **Windows:** in Explorer, open **`%LOCALAPPDATA%\Programs\RiftTask\RiftTask.exe`**.
+- **Windows:** open **Start**, search **RiftTask**, and select it. If indexing has not caught up, use **Start → All apps → RiftTask** or open **`%LOCALAPPDATA%\Programs\RiftTask\RiftTask.exe`** in Explorer. For older installations missing the shortcut, use the [discovery repair](#repair-windows-start-menu-discovery-without-reinstalling).
 - **Linux:** use `~/.local/bin/rifttask` after checking your desktop runtime dependencies.
 
 An already authenticated GitHub CLI account is reused. Otherwise select **Sign in with GitHub**, finish the Terminal/PowerShell and browser prompts, then select **Check sign-in**. A pending login is not an authenticated workspace. The UI never asks you to paste a token.
@@ -144,7 +144,29 @@ irm https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/insta
 
 `irm` downloads the script and `iex` executes it. Only run this if you trust the repository and its current contents. It builds public `main` in an owned temporary directory, not a persistent source checkout. Native-command failures throw and stop installation without exiting your PowerShell session. Keep existing security controls enabled; if organizational policy blocks the command or downloaded scripts, stop and consult your administrator rather than bypassing it.
 
-Default: `%LOCALAPPDATA%\Programs\RiftTask`. `-Dest 'C:\absolute\new\path'` selects the exact final directory. No shared Desktop/Start Menu shortcuts are created by this preview. Open the resulting `RiftTask.exe` in Explorer to start your manual test; the bootstrap does not launch the app automatically.
+Default: `%LOCALAPPDATA%\Programs\RiftTask`. `-Dest 'C:\absolute\new\path'` selects the exact final directory. After copying and checking `RiftTask.exe`, setup creates **one current-user Start Menu shortcut**, `RiftTask.lnk`, in `[Environment]::GetFolderPath('Programs')` (normally `%APPDATA%\Microsoft\Windows\Start Menu\Programs`). It uses the exact absolute executable as target and icon, the install directory as working directory, and no arguments. No administrator rights, all-users shortcuts, Desktop shortcuts or machine-wide registry registration are used. Open Start and search **RiftTask**; indexing can take time. This is **Start Menu discovery**, not Settings → Installed apps/uninstaller registration. The bootstrap never launches the app automatically.
+
+An existing `RiftTask.lnk` is refreshed only if its canonical absolute target matches this exact installation (case-insensitive) and it has no arguments. Unrelated, malformed or reparse-point shortcuts are preserved and registration stops. Choosing a new app directory does not authorize replacing a shortcut to another install. A registration failure after copying reports that app files were kept, not a completed installation; use the repair below after resolving the reported conflict.
+
+### Repair Windows Start Menu discovery without reinstalling
+
+For an existing default installation, run in a normal PowerShell session:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.ps1'))) -RegisterOnly
+```
+
+For a custom existing installation, append `-Dest 'C:\absolute\existing\RiftTask'` to that command. Unlike plain `irm | iex`, the scriptblock invocation passes these parameters to the downloaded script. This command executes moving `main`; use it only after the updated script is published there and you trust its contents. From this checkout (or an inspected downloaded script), the equivalent is:
+
+```powershell
+& .\scripts\install.ps1 -RegisterOnly
+# Custom existing installation:
+& .\scripts\install.ps1 -RegisterOnly -Dest 'C:\absolute\existing\RiftTask'
+```
+
+Repair checks that `RiftTask.exe` exists **before** build-tool discovery. It does not need Git/Node/npm, download app dependencies, build, replace any app files, launch the app, upgrade, uninstall or touch app data. It only creates/safely refreshes that current-user shortcut. Do not combine `-RegisterOnly` with `-Check`, `-DryRun`, `-Source` or `-Ref`. If the shortcut belongs to another installation, inspect it manually; the script does not remove or retarget it.
+
+**Menu bar:** current source removes Electron's default File/Edit/View/Window/Help bar on Windows/Linux, retaining the native title bar and minimize/maximize/close buttons and normal renderer keyboard input. macOS keeps its standard application menu. Discovery repair alone does **not** update an old executable or remove its old menu; test a build of the updated source for that change. No automatic upgrade/deletion workaround is provided.
 
 ### Optional: download and inspect first
 
@@ -196,11 +218,11 @@ The installer fetches, detaches, verifies and prints the exact source commit bef
 
 ### Preservation and limits
 
-- **Every existing final destination is refused**, including an empty directory, file, symlink/reparse point or existing app. On Linux an existing `~/.local/bin/rifttask` is also refused. No automatic uninstall, replacement or upgrade; choose a genuinely new destination. Do not remove your old install/data just to satisfy the script.
+- **Every existing final app destination is refused for installation**, including an empty directory, file, symlink/reparse point or existing app. On Linux an existing `~/.local/bin/rifttask` is also refused. No automatic uninstall, replacement or upgrade; choose a genuinely new destination. Do not remove your old install/data just to satisfy the script. Windows `-RegisterOnly` is the explicit exception for reading an existing app and registering its shortcut only; it does not overwrite the app.
 - No application-data migration/deletion, credential changes, quarantine stripping or security bypass. Existing data remains in Electron's normal account-scoped application-data location; a new app directory is not a separate data profile.
 - Build/clone failures stop before destination creation. A failed copy or interruption can leave a **new, partial destination** (and possibly a new launcher); it is not automatically deleted. Inspect it manually before choosing another path. Only the invocation's owned temporary build tree is cleaned up.
 - `--check` / `--dry-run` and `-Check` / `-DryRun` do not clone, build, create directories/shortcuts, log in or alter app data. They fail on missing build tools (Git/Node/npm), unsupported Node/architecture or an existing destination—not missing `gh` or unavailable authentication. They inspect tools/destination, **not full compiler availability, network/source access, dependency downloads, app sign-in, signing or successful native launch**.
-- Current evidence: [installer evidence](installer-evidence.md). Linux executable-fixture tests and simulated macOS path selection are **not** native macOS/Windows installation proof. PowerShell runtime was unavailable on the verification host; source-contract checks are not runtime evidence.
+- Current evidence: [installer evidence](installer-evidence.md), [menu/discovery evidence](windows-discovery-evidence.md). Linux executable fixtures and simulated macOS path selection are **not** native macOS/Windows installation proof. Menu/discovery fixtures execute real PowerShell 7.4.6 on Linux with simulated Windows COM/build commands; they do not verify Windows Search indexing, native shortcut behavior, PowerShell 5.1 or native window chrome. Earlier installer evidence's unavailable-PowerShell note is historical.
 
 ## Verification
 

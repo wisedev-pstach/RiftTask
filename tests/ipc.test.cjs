@@ -59,7 +59,7 @@ test('sandbox-compatible preload exposes frozen narrow promise bridge without ra
 function fakeElectron({lock=true}={}) {
   const {EventEmitter}=require('node:events');
   const app=new EventEmitter(); let quit=0;
-  Object.assign(app,{requestSingleInstanceLock:()=>lock,whenReady:async()=>{},getPath:()=>'/local/userData',quit:()=>quit++});
+  Object.assign(app,{setAppUserModelId:()=>{},requestSingleInstanceLock:()=>lock,whenReady:async()=>{},getPath:()=>'/local/userData',quit:()=>quit++});
   const windows=[]; const handlers=new Map();
   class BrowserWindow extends EventEmitter {
     constructor(options) {
@@ -68,13 +68,40 @@ function fakeElectron({lock=true}={}) {
       this.webContents.setWindowOpenHandler=fn=>this.windowOpen=fn;
       this.webContents.session={setPermissionRequestHandler:fn=>this.permission=fn,setPermissionCheckHandler:fn=>this.permissionCheck=fn};
       this.show=()=>this.shown=true;this.focus=()=>this.focused=true;this.isMinimized=()=>true;this.restore=()=>this.restored=true;
+      this.removeMenu=()=>this.menuRemoved=true;this.setMenuBarVisibility=value=>this.menuVisible=value;
       this.loadFile=async file=>{this.file=file;}; windows.push(this);
     }
   }
-  const electron={app,BrowserWindow,ipcMain:{handle:(k,v)=>handlers.set(k,v),removeHandler:k=>handlers.delete(k)},shell:{openExternal:async()=>{}},dialog:{showErrorBox:()=>{}}};
+  const electron={app,BrowserWindow,Menu:{setApplicationMenu:()=>{}},ipcMain:{handle:(k,v)=>handlers.set(k,v),removeHandler:k=>handlers.delete(k)},shell:{openExternal:async()=>{}},dialog:{showErrorBox:()=>{}}};
   const deps={createAuth:options=>({options}),createStore:root=>({root}),createService:({auth,store})=>({session:async()=>({auth,store})})};
   return {electron,deps,windows,handlers,quitCount:()=>quit};
 }
+test('Windows/Linux remove Electron menus on every window while retaining native caption and edit shortcuts', async () => {
+  const {start}=require('../desktop/main.cjs');
+  for (const platform of ['win32','linux','darwin']) {
+    const h=fakeElectron();const menus=[];
+    h.electron.Menu={setApplicationMenu:menu=>menus.push(menu)};
+    await start(h.electron,h.deps,platform);
+    h.windows[0].emit('closed');h.electron.app.emit('activate');
+    assert.deepEqual(menus,platform==='darwin'?[]:[null]);
+    for(const win of h.windows) {
+      assert.notEqual(win.options.frame,false,'keep OS window controls');
+      assert.equal(win.webContents.listenerCount('before-input-event'),0,'do not swallow keyboard shortcuts');
+      if(platform!=='darwin') {assert.equal(win.menuRemoved,true);assert.equal(win.menuVisible,false);}
+    }
+  }
+});
+
+test('Windows alone sets the runtime application identity to the packaged app ID', async () => {
+  const {start}=require('../desktop/main.cjs');
+  for (const platform of ['win32','linux','darwin']) {
+    const h=fakeElectron();const ids=[];
+    h.electron.app.setAppUserModelId=id=>ids.push(id);
+    await start(h.electron,h.deps,platform);
+    assert.deepEqual(ids,platform==='win32'?['dev.wisedev.rifttask']:[]);
+  }
+});
+
 test('main boots only local dist with locked down BrowserWindow and denies navigation/windows/permissions', async () => {
   const {start}=require('../desktop/main.cjs'); const h=fakeElectron();
   let closes=0,disposals=0;const originalService=h.deps.createService;h.deps.createService=options=>({...originalService(options),closeTerminals:()=>closes++,dispose:()=>disposals++});

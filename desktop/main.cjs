@@ -8,7 +8,7 @@ const {registerIpc} = require('./ipc.cjs');
 
 // Electron is loaded only at the executable entry point, enabling node:test
 // coverage without disabling Electron's sandbox or starting a GUI in tests.
-async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {createAuth,createStore,createService}) {
+async function start({app,BrowserWindow,Menu,ipcMain,shell,dialog}, dependencies = {createAuth,createStore,createService}, platform = process.platform) {
   if (!app.requestSingleInstanceLock()) {app.quit(); return;}
   let window = null;
   let dispose = () => {};
@@ -23,6 +23,10 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
   app.on('will-quit',()=>dispose());
   app.on('window-all-closed',()=>{if (process.platform !== 'darwin') app.quit();});
   await app.whenReady();
+  // Keep native window controls and renderer keyboard input; remove only the
+  // default Electron File/Edit/View/Window/Help menu on Windows and Linux.
+  if (platform !== 'darwin') Menu.setApplicationMenu(null);
+  if (platform === 'win32') app.setAppUserModelId('dev.wisedev.rifttask');
   const userData = app.getPath('userData');
   const auth = dependencies.createAuth({cachePath:path.join(userData,'identity.json')});
   const store = dependencies.createStore(userData);
@@ -52,6 +56,10 @@ async function start({app,BrowserWindow,ipcMain,shell,dialog}, dependencies = {c
         webSecurity:true,allowRunningInsecureContent:false,webviewTag:false
       }
     });
+    if (platform !== 'darwin') {
+      current.removeMenu();
+      current.setMenuBarVisibility(false);
+    }
     window = current;
     const contents = current.webContents;
     const prevent = event => event.preventDefault();

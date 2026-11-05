@@ -7,9 +7,15 @@
     Checks build prerequisites (git, node, npm),
     clones public main over HTTPS into a fresh tree, uses shipped node-pty N-API prebuilds,
     packages RiftTask and installs it to %LOCALAPPDATA%\Programs\RiftTask,
-    refusing all existing destinations. No shared shortcuts or upgrades.
+    refusing all existing install destinations. Creates one current-user Start Menu
+    shortcut (RiftTask.lnk), never an all-users/Desktop shortcut. No upgrades.
+    -RegisterOnly repairs discovery for an existing installation without build tools.
     Requires Git and Node 24.15+ (24.x) or 26+ with npm/npx; no C++ toolchain.
     Native Windows execution is not yet verified.
+
+.PARAMETER RegisterOnly
+    Creates or safely refreshes the per-user Start Menu shortcut for an existing
+    RiftTask.exe at the default installation or -Dest. Does not build or upgrade.
 
 .PARAMETER Check
     Inspects environment and prerequisites without installing.
@@ -31,6 +37,7 @@
 #>
 [CmdletBinding()]
 param(
+    [switch]$RegisterOnly,
     [switch]$Check,
     [switch]$DryRun,
     [switch]$Source,
@@ -53,14 +60,74 @@ function Invoke-Native {
     }
 }
 
+function Register-StartMenu {
+    param([string]$InstallDir)
+    $ExePath = Join-Path $InstallDir 'RiftTask.exe'
+    if (-not (Test-Path -LiteralPath $ExePath -PathType Leaf)) {
+        throw "RiftTask.exe not found at: $ExePath. Registration stopped; no build was attempted."
+    }
+    $Programs = [Environment]::GetFolderPath('Programs')
+    if (-not $Programs) {
+        if (-not $env:APPDATA -or -not [IO.Path]::IsPathRooted($env:APPDATA)) {
+            throw 'Cannot resolve the current-user Start Menu Programs folder.'
+        }
+        $Programs = Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs'
+    }
+    $Programs = [IO.Path]::GetFullPath($Programs)
+    $LinkPath = Join-Path $Programs 'RiftTask.lnk'
+    $Existing = Get-Item -LiteralPath $LinkPath -Force -ErrorAction SilentlyContinue
+    if ($Existing -and ($Existing.PSIsContainer -or ($Existing.Attributes -band [IO.FileAttributes]::ReparsePoint))) {
+        throw "Refusing non-regular Start Menu shortcut: $LinkPath"
+    }
+    $Shell = New-Object -ComObject WScript.Shell
+    $Shortcut = $Shell.CreateShortcut($LinkPath)
+    if ($Existing) {
+        $Matches = $false
+        try {
+            $Matches = [IO.Path]::IsPathRooted($Shortcut.TargetPath) -and
+                [string]::Equals([IO.Path]::GetFullPath($Shortcut.TargetPath), $ExePath, [StringComparison]::OrdinalIgnoreCase) -and
+                [string]::IsNullOrEmpty($Shortcut.Arguments)
+        } catch { $Matches = $false }
+        if (-not $Matches) {
+            throw "Refusing unrelated Start Menu shortcut: $LinkPath. Existing link was preserved; inspect it manually."
+        }
+    }
+    [IO.Directory]::CreateDirectory($Programs) | Out-Null
+    $Shortcut.TargetPath = $ExePath
+    $Shortcut.Arguments = ''
+    $Shortcut.WorkingDirectory = $InstallDir
+    $Shortcut.IconLocation = "$ExePath,0"
+    $Shortcut.Description = 'RiftTask - local-first project workspace'
+    $Shortcut.Save()
+    if (-not (Test-Path -LiteralPath $LinkPath -PathType Leaf)) { throw 'Start Menu shortcut was not saved.' }
+    $Saved = $Shell.CreateShortcut($LinkPath)
+    if (-not [string]::Equals($Saved.TargetPath, $ExePath, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::IsNullOrEmpty($Saved.Arguments) -or
+        -not [string]::Equals($Saved.WorkingDirectory, $InstallDir, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($Saved.IconLocation, "$ExePath,0", [StringComparison]::OrdinalIgnoreCase) -or
+        $Saved.Description -ne $Shortcut.Description) {
+        throw 'Start Menu shortcut verification failed; inspect the installed shortcut.'
+    }
+    Write-Host "Start Menu shortcut: $LinkPath"
+    Write-Host 'Open Start and search for RiftTask. Windows may take a moment to index the shortcut.'
+}
+
 if ($Help) {
     Write-Output 'Usage: install.ps1 [-Check] [-DryRun] [-Source] [-Dest <new directory>] [-Ref <full lowercase SHA>] [-Help]'
+    Write-Output 'Repair discovery only: install.ps1 -RegisterOnly [-Dest <existing installation directory>]'
     return
 }
 
 $Repo = "https://github.com/wisedev-pstach/RiftTask.git"
 $AppName = "RiftTask"
 $CheckOnly = $Check.IsPresent -or $DryRun.IsPresent
+$TargetDir = if ($Dest) { $Dest } else { Join-Path $env:LOCALAPPDATA "Programs\$AppName" }
+$TargetDir = [System.IO.Path]::GetFullPath($TargetDir)
+if ($RegisterOnly) {
+    if ($CheckOnly -or $Source -or $Ref) { throw 'Do not combine -RegisterOnly with -Check, -DryRun, -Source or -Ref.' }
+    Register-StartMenu $TargetDir
+    return
+}
 
 Write-Host "Checking environment for RiftTask installation..." -ForegroundColor Cyan
 
@@ -108,8 +175,6 @@ if ($Errors -gt 0) {
     throw "Installation aborted due to missing prerequisites."
 }
 
-$TargetDir = if ($Dest) { $Dest } else { Join-Path $env:LOCALAPPDATA "Programs\$AppName" }
-$TargetDir = [System.IO.Path]::GetFullPath($TargetDir)
 # Get-Item -Force also detects reparse points; use literal paths throughout.
 if (Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue) {
     throw "Error: refusing existing destination: $TargetDir (no upgrades in this preview)."
@@ -164,8 +229,15 @@ try {
     }
 
     $ExePath = Join-Path $TargetDir "$AppName.exe"
+    if (-not (Test-Path -LiteralPath $ExePath -PathType Leaf)) {
+        throw "Copied executable not found at: $ExePath. Installation stopped; partial app files were kept."
+    }
 
-    # Source preview deliberately creates no shared Desktop/Start Menu shortcuts.
+    try {
+        Register-StartMenu $TargetDir
+    } catch {
+        throw "Application installed at: $TargetDir; Start Menu registration failed. App files were kept. Retry with -RegisterOnly -Dest for this directory. $($_.Exception.Message)"
+    }
 
     Write-Host "`n=== RiftTask installation complete! ===" -ForegroundColor Green
     Write-Host "Installed at: $TargetDir"

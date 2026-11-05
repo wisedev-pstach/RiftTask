@@ -138,11 +138,14 @@ test('PowerShell source contract: ARM64 architecture and unpacked path are expli
   assert.ok(s.includes("'release\\win-arm64-unpacked'"));
   assert.equal(s.includes('Is64BitOperatingSystem'),false);
 });
-test('PowerShell source contract: preview validates Node baseline and writes no shared shortcuts (not native proof)', () => {
+test('PowerShell source contract: supported Node and per-user-only shortcut registration (not native proof)', () => {
   const s=fs.readFileSync(installPs1,'utf8');
   assert.ok(s.includes("[version]'24.15.0'"));
   assert.ok(s.includes('$NodeVersion.Major -ge 26'));
-  assert.equal(s.includes('CreateShortcut'),false,'preview must not replace unrelated shortcuts');
+  assert.ok(s.includes("[Environment]::GetFolderPath('Programs')"));
+  assert.ok(s.includes("Join-Path $Programs 'RiftTask.lnk'"));
+  assert.ok(s.includes('OrdinalIgnoreCase'));
+  assert.doesNotMatch(s,/CommonPrograms|CommonDesktop|HKLM:|HKEY_LOCAL_MACHINE|RunAs/);
 });
 const posix = {skip: process.platform === 'win32' ? 'POSIX installer requires Bash' : false};
 test('macOS installer uses script-free ci, exact runtime arch preparation, and disables packaging rebuild', posix, t => {
