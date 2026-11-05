@@ -24,6 +24,9 @@ function fixture(t, overrides = {}) {
   const home = path.join(dir, 'home');
   const tmp = path.join(dir, 'tmp');
   for (const p of [bin, home, tmp]) fs.mkdirSync(p);
+  const asarInput=path.join(dir,'asar-input');fs.mkdirSync(asarInput);fs.writeFileSync(path.join(asarInput,'package.json'),JSON.stringify({name:'rifttask',main:'desktop/main.cjs',build:{appId:'dev.wisedev.rifttask'}}));
+  const archive=path.join(dir,'template.asar');
+  const archiveResult=spawnSync(process.execPath,['--input-type=module','-e','import {createPackage} from "@electron/asar"; await createPackage(process.argv[1],process.argv[2]);',asarInput,archive],{cwd:root,encoding:'utf8'});assert.equal(archiveResult.status,0,archiveResult.stderr);
   for (const cmd of ['bash', 'dirname', 'mktemp', 'cp', 'rm', 'chmod', 'head', 'mkdir', 'grep', 'cat']) {
     fs.symlinkSync(executable(cmd), path.join(bin, cmd));
   }
@@ -35,13 +38,15 @@ fs.appendFileSync(e.LOG,JSON.stringify([cmd,...args])+'\n');
 if(cmd==='uname') { console.log(args[0]==='-s' ? (e.FIXTURE_OS || 'Linux') : (e.ARCH || 'x86_64')); process.exit(0); }
 if(cmd==='gh') process.exit(97); // Any installer invocation is a regression.
 if(args.includes('--version')) { console.log(cmd==='node' ? (e.NODE_VERSION || 'v24.15.0') : 'fixture 1'); process.exit(0); }
-if(cmd==='node') { console.log('24.15.0'); process.exit(0); }
+if(cmd==='pgrep') process.exit(e.RUNNING==='1'?0:1);
+if(cmd==='node') {const r=require('node:child_process').spawnSync(e.REAL_NODE,args,{env:e,encoding:'utf8'});process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');process.exit(r.status??1);}
 if(cmd==='git' && e.LOCAL_SOURCE) {
  const actual=args[0]==='clone'?args.map(a=>a==='https://github.com/wisedev-pstach/RiftTask.git'?e.LOCAL_SOURCE:a):args;
  const r=require('node:child_process').spawnSync(e.REAL_GIT,actual,{env:e,encoding:'utf8'});process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');process.exit(r.status??1);
 }
 if(cmd==='git' && args[0]==='clone') {
   const dest=args.at(-1); fs.mkdirSync(dest,{recursive:true});
+  fs.mkdirSync(path.join(dest,'scripts'),{recursive:true});fs.copyFileSync(path.join(e.REAL_ROOT,'scripts/install-deploy.cjs'),path.join(dest,'scripts/install-deploy.cjs'));fs.symlinkSync(path.join(e.REAL_ROOT,'node_modules'),path.join(dest,'node_modules'));
   fs.mkdirSync(path.join(dest,'release','linux-unpacked'),{recursive:true});
   fs.writeFileSync(path.join(dest,'release','linux-unpacked','stale'),'stale');
   if(e.STALE_EXEC==='1') fs.writeFileSync(path.join(dest,'release','linux-unpacked','rifttask'),'stale executable',{mode:0o755});
@@ -61,13 +66,15 @@ if(cmd==='npx' || step==='pack') {
   if(e.FIXTURE_OS==='Darwin') {
     const macExe=path.join(bundle,'Contents','MacOS','RiftTask');
     fs.mkdirSync(path.dirname(macExe),{recursive:true}); fs.copyFileSync(app,macExe); fs.chmodSync(macExe,0o755);
+    fs.mkdirSync(path.join(bundle,'Contents','Resources'),{recursive:true});fs.copyFileSync(e.ASAR_TEMPLATE,path.join(bundle,'Contents','Resources','app.asar'));
+    fs.writeFileSync(path.join(bundle,'Contents','Info.plist'),'<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.wisedev.rifttask</string><key>CFBundleExecutable</key><string>RiftTask</string></dict></plist>');
   }
 }
 `;
-  for (const cmd of ['gh', 'git', 'node', 'npm', 'npx', 'uname', 'xattr']) {
+  for (const cmd of ['gh', 'git', 'node', 'npm', 'npx', 'uname', 'xattr', 'pgrep']) {
     fs.writeFileSync(path.join(bin, cmd), program, {mode:0o755});
   }
-  const env = {PATH:bin, HOME:home, TMPDIR:tmp, LOG:path.join(dir,'calls'), BASH:bash,
+  const env = {PATH:bin, HOME:home, TMPDIR:tmp, LOG:path.join(dir,'calls'), BASH:bash, REAL_NODE:process.execPath,REAL_ROOT:root,ASAR_TEMPLATE:archive,RIFTTASK_TEST_GNU_MV:'1',
     ...overrides};
   const dest = path.join(dir, 'destination');
   const script = path.join(dir, 'install.sh');
@@ -109,13 +116,13 @@ test('PowerShell source contract: all native calls use immediately checked exit 
   for(const command of ["Invoke-Native git @('clone'", "Invoke-Native npm @('ci'", "Invoke-Native npm @('run', 'native:prepare', '--', $Arch)", "Invoke-Native npm @('run', 'build')", "Invoke-Native npx @("])
     assert.ok(s.includes(command),command);
 });
-test('PowerShell source contract: refuse existing literal destination, no recursive user-path removal (not native proof)', () => {
+test('PowerShell delegates literal app replacement to shared staged publisher, never recursively removes user target (not native proof)', () => {
   const s=fs.readFileSync(installPs1,'utf8');
   assert.ok(s.includes('Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue'));
   assert.ok(s.includes('refusing existing destination'));
   assert.equal(/Remove-Item[^\n]*\$TargetDir/.test(s),false);
-  assert.ok(s.includes('New-Item -ItemType Directory -Path $TargetDir -ErrorAction Stop'));
-  assert.ok(s.includes('Copy-Item -LiteralPath'));
+  assert.ok(s.includes("$DeployHelper = Join-Path $BuildDir 'scripts/install-deploy.cjs'"));
+  assert.ok(s.includes("Invoke-Native node @($DeployHelper, 'deploy', 'win', $TargetDir"));
 });
 test('PowerShell source contract: isolated public main clone owned before clone and cleanup after Pop (not native proof)', () => {
   const s=fs.readFileSync(installPs1,'utf8');
@@ -332,9 +339,18 @@ test('README quick curl recipe streams macOS source build without gh',posix,t=>{
  assert.deepEqual(fs.readdirSync(f.tmp),[]);
  assert.equal(fs.existsSync(path.join(f.dir,'RiftTask-source-preview')),false);
  const again=spawnSync(bash,['-c',quickRecipe()],{cwd:f.dir,env:f.env,encoding:'utf8'});
- assert.notEqual(again.status,0);assert.match(again.stderr,/refusing existing destination/);
- assert.equal(f.calls().filter(c=>c[1]==='clone').length,1,'retry must not build or overwrite');
+ assert.equal(again.status,0,again.stdout+again.stderr);assert.match(again.stdout,/Previous app backup:/);
+ assert.equal(f.calls().filter(c=>c[1]==='clone').length,2,'rerunning the exact recipe rebuilds and safely updates');
 });
+test('Mac update build failure and running app preserve previous executable and all backups; check makes no reservations',posix,t=>{
+ const f=fixture(t,{FIXTURE_OS:'Darwin'});const dest=path.join(f.dir,'installed.app');let r=f.run(['--dest',dest]);assert.equal(r.status,0,r.stdout+r.stderr);
+ const exe=path.join(dest,'Contents/MacOS/RiftTask');fs.writeFileSync(exe,'old application',{mode:0o755});fs.unlinkSync(path.join(dest,'.rifttask-install.json'));
+ const snapshot=fs.readdirSync(f.dir).sort();
+ f.env.FAIL='build';r=f.run(['--dest',dest]);assert.notEqual(r.status,0);assert.equal(fs.readFileSync(exe,'utf8'),'old application');assert.deepEqual(fs.readdirSync(f.dir).sort(),snapshot);
+ delete f.env.FAIL;f.env.RUNNING='1';r=f.run(['--dest',dest]);assert.notEqual(r.status,0);assert.match(r.stderr,/close RiftTask/i);assert.equal(fs.readFileSync(exe,'utf8'),'old application');
+ delete f.env.RUNNING;r=f.run(['--check','--dest',dest]);assert.equal(r.status,0,r.stdout+r.stderr);assert.match(r.stdout,/Will update/);assert.deepEqual(fs.readdirSync(f.dir).sort(),snapshot);assert.deepEqual(fs.readdirSync(f.tmp),[]);
+});
+
 test('README quick curl recipe reports fetch failure without clone or build',posix,t=>{
  const f=fixture(t);curlFixture(f,true);
  const r=spawnSync(bash,['-c',quickRecipe()],{cwd:f.dir,env:f.env,encoding:'utf8',timeout:15000});

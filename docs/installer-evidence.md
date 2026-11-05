@@ -1,3 +1,51 @@
+# Installer verification evidence
+
+## Current rerunnable-update implementation
+
+Mac/Windows now delegate publication to freshly fetched `scripts/install-deploy.cjs`, loaded after dependencies are ready. Fresh build, native verification and packaging precede sibling staging, staged identity validation, exclusive deployment locking, old-app backup and rename promotion. Failed promotion restores the old app; failed rollback prints the retained backup/manual restore paths. Existing backups and application data are never pruned. Linux behavior remains new-install-only.
+
+Test-first failures were observed for legacy replacement, the exact repeated Bash curl and PowerShell irm recipes, unsafe symlinks/overlaps, copy/promotion/rollback and running/locked/raced destinations, empty executables, cleanup diagnostics, and builder-stripped canonical identity. Final automated core result: **247 tests, 241 passed, 6 optional packaging tests skipped, zero failures**, with real PowerShell 7.4.6 on Linux and simulated Windows COM/build tools. UI: **65 passed**. Renderer build and host Linux x64 packaging succeeded. Actual Electron 45 PTY preparation verified TTY/input/state/resize/cleanup after loading missing GTK runtime libraries from owned scratch downloads using `LD_LIBRARY_PATH=/opt/data/cache/scratch/rift-native-libs/root/usr/lib/x86_64-linux-gnu`. No native Mac/Windows installation/launch proof is claimed.
+
+Reproduce core tests:
+
+```sh
+PATH=/opt/data/cache/scratch/rifttask-pwsh:$PATH DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 RIFT_PWSH=/opt/data/cache/scratch/rifttask-pwsh/pwsh npm run test:core
+```
+
+### Legacy identity and trusted temp-root corrections
+
+The stripped-legacy compatibility blocker is fixed in the helper and exercised against real ASARs made from historical `30adc55:package.json` passed through the installed electron-builder `createTransformer`. Assertions require both `build` and `rifttask` to be absent from the legacy packaged manifest. New bundles retain `rifttask.appId`.
+
+Recognition always requires ASAR `name=rifttask`, `main=desktop/main.cjs`, and a nonempty regular executable. Any present `build.appId` or `rifttask.appId` contradicting `dev.wisedev.rifttask` rejects, even if the other ID/native metadata matches. For legacy macOS, `Info.plist` must also prove `CFBundleIdentifier=dev.wisedev.rifttask` and `CFBundleExecutable=RiftTask`, and the executable must be executable. For legacy Windows, both static PE `ProductName` and `FileDescription` must equal `RiftTask`. Windows reads only `[Diagnostics.FileVersionInfo]::GetVersionInfo` via noninteractive PowerShell, with a 10-second timeout, 8192-byte output limit, checked exit/JSON, and the executable path passed as environment data. It never launches the existing app. Missing, unreadable, or different PE resources fail closed; no filename/marker-only fallback exists. This is compatibility recognition, not cryptographic publisher authentication.
+
+Only the trusted fresh source root is realpathed before deriving the build bundle through a strict relative-containment check. Trusted temp/source roots are canonicalized for overlap checks; the destination is not canonicalized. A macOS-style trusted root alias therefore works while symlinked `.app`, executable, ASAR, plist, destination and destination ancestors remain rejected. No blanket symlink exemption was added.
+
+Actual vertical RED → GREEN commands used `node --test --test-name-pattern='<pattern>' tests/install-deploy.test.cjs`:
+
+| Pattern | Observed RED | Observed GREEN |
+| --- | --- | --- |
+| `historical Mac` | 0 pass / 1 fail: stripped legacy ASAR rejected for missing canonical ID | 1 pass: old bytes retained in backup, new app published using bundle identity |
+| `historical Windows` | 0 pass / 1 fail: stripped legacy ASAR rejected | 1 pass: explicit static-version inspector seam proves fallback and backup/publication |
+| `trusted fresh source` | 0 pass / 1 fail: trusted root alias rejected as symlink | 1 pass: canonical trusted source publishes; destination alias still refused |
+
+Final verification on Linux: **13/13 helper tests passed**; **252 core tests: 246 passed, 6 optional packaging skips, zero failures**, using the PowerShell flags above; **65 UI tests passed**; renderer build and `git diff --check` passed (existing >500 kB bundle warning remains). Core log: `/opt/data/cache/scratch/rifttask-legacy-core.log`. One intermediate negative-test fixture needed ASAR cache invalidation after rewriting the same archive; final tests explicitly uncache those rewritten fixture archives.
+
+**Native acceptance remains open:** Linux tests use sentinel executable bytes and an explicit injected Windows version inspector; they do not prove Windows PE resource reading or published binaries' actual metadata. On Windows, qualify a genuine older packaged executable's `ProductName`/`FileDescription`, the default nonexecuting inspector, reparse-path refusal, rollback and launch. Nonstandard older binaries without both exact version fields are deliberately refused. On macOS qualify actual `/var` → `/private/var` temp paths, bundle copy/signing/Gatekeeper and launch. No native Mac/Windows acceptance, commit/push, app-data access or `.local` deletion is claimed.
+
+### Framework preservation and exclusive-publication corrections
+
+The framework regression first failed with `Versions/Current` rewritten from `A` to an absolute path in the temporary fresh source. `cpSync` now uses `verbatimSymlinks:true`. The real-filesystem test builds a versioned Electron framework with Current/binary/Resources links, deploys it, deletes its own complete source tree, then checks unchanged relative link literals and successful resolution inside the installed app. Identity-path symlink rejection remains intact.
+
+Publication and rollback race regressions were each observed RED before their fix: an empty target created immediately before POSIX `renameSync` was overwritten; rollback incorrectly claimed successful restoration. All three directory moves now use `renameExclusiveSync` (old app → unique backup, stage → target, backup → target). Tests cover empty and populated late arrivals, unchanged unrelated inode/contents, retained previous bytes/backup, no nested app, owned-stage cleanup and lock removal. Additional tests cover fresh-install publication, backup-destination arrivals, destination files/symlinks, directory-only Windows hook contracts, and bounded/fail-closed native bridge behavior. [Provider contracts and authoritative native references](INSTALLER-UPDATES.md#directory-publication-provider-contract) document exact flags, dependencies and scope.
+
+Darwin's fixed JXA script uses `renamex_np(RENAME_EXCL)` with the official `0x00000004` value. Windows uses directory-only Node/libuv `MoveFileExW`, whose documented contract rejects existing destination directories. No production check-then-rename fallback was added. Running-process probes also now have 10-second / 8192-byte / hidden-console bounds. The obsolete SETUP claim that stripped legacy archives are always refused was corrected. A separate RED → GREEN regression covers a native backup move that completes but loses its child-process confirmation: diagnostics now print both the original path and backup candidate instead of falsely claiming that the old app remains at the original path.
+
+**Actual Linux syscall proof:** GNU coreutils 9.7 fixture moves were traced using scratch-extracted `strace` 6.13 and libunwind (no system package/compiler dependency was added). `/opt/data/cache/scratch/rift-rename-trace/syscalls.log` shows `renameat2(..., RENAME_NOREPLACE)` returning 0 for successful moves and `EEXIST` for publication/restore collisions; no ordinary `rename`/`renameat` fallback appeared. GNU's successful-skip status was actually observed and the helper checks source disappearance to reject it. This test-only provider is explicitly opted in via `RIFTTASK_TEST_GNU_MV=1`; unopted-in Linux/other hosts refuse. GNU/gnulib has non-atomic fallbacks on unsupported filesystems/kernels, so no portable Linux-updater guarantee is claimed.
+
+**Final verification:** full core **262 tests: 256 passed, 6 optional packaging skips, 0 failed**, including real PowerShell **7.4.6** parser and simulated Windows installer execution; UI **65 passed in 7 files**; production renderer build, Bash syntax and `git diff --check` passed. Core log: `/opt/data/cache/scratch/rifttask-review-core.log`. The existing >500 kB JS chunk warning remains. Native Mac/Windows hosts were unavailable: JXA/Windows hooks and Linux filesystem/syscall tests are **not** native installation/launch acceptance. Native platform qualification remains open. No commit/push, real app-data access, `.local` deletion or quarantine changes occurred.
+
+The following sections are historical evidence for earlier installer behavior, not current update instructions.
+
 # Simple public quick-start — 4 November 2026
 
 ## Current entrypoints
