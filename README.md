@@ -23,7 +23,7 @@ bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/wisedev-pstach
 irm https://raw.githubusercontent.com/wisedev-pstach/RiftTask/main/scripts/install.ps1 | iex
 ```
 
-These commands execute downloaded code and build public `main` in a temporary directory. No GitHub login or `gh` is needed to install. Existing app destinations are refused, not overwritten; keep OS security controls enabled.
+These commands execute downloaded code and build public `main` in a temporary directory. No GitHub login or `gh` is needed to install. On Mac/Windows, close RiftTask and rerun the same command to update a recognized installation; task data stays untouched and the previous app backup is kept. Keep OS security controls enabled.
 
 **Open the app yourself after setup:**
 

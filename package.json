@@ -6,6 +6,7 @@
   "author": "wisedev",
   "license": "UNLICENSED",
   "main": "desktop/main.cjs",
+  "rifttask": {"appId": "dev.wisedev.rifttask"},
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",

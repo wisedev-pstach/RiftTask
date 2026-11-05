@@ -19,7 +19,7 @@ Options:
   --check        Inspect environment and prerequisites without installing
   --dry-run      Alias for --check
   --source       Compatibility flag; this preview always builds fresh source
-  --dest <dir>   Exact NEW app directory (macOS: must end in .app)
+  --dest <dir>   Exact app directory (macOS: recognized apps can be updated; must end in .app)
   --ref <sha>    Build exactly this full 40-character commit from the public repo
   --help, -h     Show this help message
 EOF
@@ -120,7 +120,7 @@ if [[ $ERRORS -gt 0 ]]; then
   exit 1
 fi
 
-# --dest is the exact new app directory (a .app bundle on macOS).
+# --dest is the exact app directory (a .app bundle on macOS).
 if [[ "$OS" == "mac" ]]; then
   TARGET_DIR="${CUSTOM_DEST:-$HOME/Applications/$APP_NAME.app}"
   [[ "$TARGET_DIR" == *.app ]] || { echo 'Error: macOS destination must end in .app' >&2; exit 1; }
@@ -135,8 +135,20 @@ refuse_existing() {
     exit 1
   fi
 }
-refuse_existing "$TARGET_DIR"
-if [[ "$OS" == "linux" ]]; then refuse_existing "$LAUNCHER_DIR/rifttask"; fi
+if [[ "$OS" == "mac" ]]; then
+  # Fast, dependency-free preflight. Legacy ASAR validation follows npm ci.
+  [[ "$TARGET_DIR" != / && "$TARGET_DIR" != "$HOME" && ! -f "$TARGET_DIR" ]] || { echo 'Error: refusing unsafe existing destination.' >&2; exit 1; }
+  ancestor="$TARGET_DIR"
+  while [[ "$ancestor" != / ]]; do
+    [[ ! -L "$ancestor" ]] || { echo "Error: refusing symlink destination/ancestor: $ancestor" >&2; exit 1; }
+    ancestor="$(dirname "$ancestor")"
+  done
+  if [[ -d "$TARGET_DIR" ]]; then echo 'Will update recognized RiftTask installation (identity verification after dependencies are ready).';
+  else echo 'Will install RiftTask.'; fi
+else
+  refuse_existing "$TARGET_DIR"
+  refuse_existing "$LAUNCHER_DIR/rifttask"
+fi
 
 if [[ "$CHECK_ONLY" == "true" ]]; then
   echo ""
@@ -169,6 +181,8 @@ echo "Building RiftTask from source..."
 if [[ "$OS" == "mac" ]]; then
   # Never run node-pty's compile fallback, even with build_from_source inherited.
   npm ci --ignore-scripts --no-audit --no-fund
+  DEPLOY_HELPER="$BUILD_DIR/scripts/install-deploy.cjs"
+  PRIOR_FINGERPRINT="$(node "$DEPLOY_HELPER" inspect mac "$TARGET_DIR" "$BUILD_DIR" "$HOME" "${TMPDIR:-/tmp}" '')"
 else
   npm ci --no-audit --no-fund
 fi
@@ -189,10 +203,9 @@ if [[ "$OS" == "mac" ]]; then
     exit 1
   fi
 
-  # Never change Gatekeeper/quarantine protections or replace existing apps.
-  mkdir -p -- "$(dirname "$TARGET_DIR")"
-  mkdir -- "$TARGET_DIR"
-  cp -R -- "$APP_BUNDLE/." "$TARGET_DIR/"
+  # Same-filesystem staging, recognized-app backup, atomic promotion/rollback.
+  # Never change Gatekeeper/quarantine protections or application data.
+  node "$DEPLOY_HELPER" deploy mac "$TARGET_DIR" "$BUILD_DIR" "$HOME" "${TMPDIR:-/tmp}" '' "$PRIOR_FINGERPRINT" "$BUILD_DIR/$APP_BUNDLE" "$SOURCE_COMMIT"
   TARGET_APP="$TARGET_DIR"
 
   echo ""

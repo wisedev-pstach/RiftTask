@@ -7,8 +7,9 @@
     Checks build prerequisites (git, node, npm),
     clones public main over HTTPS into a fresh tree, uses shipped node-pty N-API prebuilds,
     packages RiftTask and installs it to %LOCALAPPDATA%\Programs\RiftTask,
-    refusing all existing install destinations. Creates one current-user Start Menu
-    shortcut (RiftTask.lnk), never an all-users/Desktop shortcut. No upgrades.
+    safely updating recognized existing RiftTask installations after closing the app.
+    Keeps a previous-app backup; never modifies application data. Creates one
+    current-user Start Menu shortcut, never an all-users/Desktop shortcut.
     -RegisterOnly repairs discovery for an existing installation without build tools.
     Requires Git and Node 24.15+ (24.x) or 26+ with npm/npx; no C++ toolchain.
     Native Windows execution is not yet verified.
@@ -113,7 +114,7 @@ function Register-StartMenu {
 }
 
 if ($Help) {
-    Write-Output 'Usage: install.ps1 [-Check] [-DryRun] [-Source] [-Dest <new directory>] [-Ref <full lowercase SHA>] [-Help]'
+    Write-Output 'Usage: install.ps1 [-Check] [-DryRun] [-Source] [-Dest <application directory>] [-Ref <full lowercase SHA>] [-Help]'
     Write-Output 'Repair discovery only: install.ps1 -RegisterOnly [-Dest <existing installation directory>]'
     return
 }
@@ -175,10 +176,23 @@ if ($Errors -gt 0) {
     throw "Installation aborted due to missing prerequisites."
 }
 
-# Get-Item -Force also detects reparse points; use literal paths throughout.
-if (Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue) {
-    throw "Error: refusing existing destination: $TargetDir (no upgrades in this preview)."
+# Fast preflight must not interpret literal paths or require ASAR before npm ci.
+$ExistingTarget = Get-Item -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue
+if ($ExistingTarget -and (-not $ExistingTarget.PSIsContainer -or ($ExistingTarget.Attributes -band [IO.FileAttributes]::ReparsePoint))) {
+    throw "Error: refusing existing destination file/reparse point: $TargetDir"
 }
+if ($TargetDir -eq [IO.Path]::GetPathRoot($TargetDir) -or $TargetDir -eq [IO.Path]::GetFullPath($HOME)) { throw 'Refusing root/home destination.' }
+$Ancestor = $TargetDir
+while ($Ancestor) {
+    $Item = Get-Item -LiteralPath $Ancestor -Force -ErrorAction SilentlyContinue
+    if ($Item -and ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Refusing reparse destination ancestor: $Ancestor" }
+    $Parent = [IO.Path]::GetDirectoryName($Ancestor)
+    if ($Parent -eq $Ancestor) { break }
+    $Ancestor = $Parent
+}
+if ($ExistingTarget) { Write-Host 'Will update recognized RiftTask installation (identity verification after dependencies are ready).' }
+else { Write-Host 'Will install RiftTask.' }
+if (Get-Process -Name RiftTask -ErrorAction SilentlyContinue) { throw 'Please close RiftTask and retry; no processes were stopped.' }
 
 if ($CheckOnly) {
     Write-Host "Tools/destination check passed. Dependency/runtime verification and native launch remain unverified." -ForegroundColor Green
@@ -208,6 +222,8 @@ try {
     Write-Host "Building RiftTask from source..." -ForegroundColor Cyan
     # Prevent all lifecycle compile fallbacks, including inherited build_from_source.
     Invoke-Native npm @('ci', '--ignore-scripts', '--no-audit', '--no-fund')
+    $DeployHelper = Join-Path $BuildDir 'scripts/install-deploy.cjs'
+    $PriorFingerprint = (Invoke-Native node @($DeployHelper, 'inspect', 'win', $TargetDir, $BuildDir, $HOME, [IO.Path]::GetTempPath(), $env:APPDATA)).Trim()
     Invoke-Native npm @('run', 'native:prepare', '--', $Arch)
     Invoke-Native npm @('run', 'build')
 
@@ -222,16 +238,10 @@ try {
 
     Write-Host "Installing to $TargetDir..." -ForegroundColor Cyan
 
-    # No -Force: exclusive reservation refuses even an empty existing directory.
-    New-Item -ItemType Directory -Path $TargetDir -ErrorAction Stop | Out-Null
-    foreach ($Child in Get-ChildItem -LiteralPath $WinBundle -Force) {
-        Copy-Item -LiteralPath $Child.FullName -Destination $TargetDir -Recurse -ErrorAction Stop
-    }
-
+    # Fresh package is validated and staged beside target before touching old app.
+    if (Get-Process -Name RiftTask -ErrorAction SilentlyContinue) { throw 'Please close RiftTask and retry; no processes were stopped.' }
+    Invoke-Native node @($DeployHelper, 'deploy', 'win', $TargetDir, $BuildDir, $HOME, [IO.Path]::GetTempPath(), $env:APPDATA, $PriorFingerprint, $WinBundle, $Ref)
     $ExePath = Join-Path $TargetDir "$AppName.exe"
-    if (-not (Test-Path -LiteralPath $ExePath -PathType Leaf)) {
-        throw "Copied executable not found at: $ExePath. Installation stopped; partial app files were kept."
-    }
 
     try {
         Register-StartMenu $TargetDir
