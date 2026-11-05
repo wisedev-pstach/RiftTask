@@ -44,4 +44,5 @@ test('corrupt configuration cannot become consent and can be reset without trans
 });
 test('source repository numeric identity stays forbidden after a rename',async t=>{const f=fixture(t);f.transport.repository=async()=>({...repo,id:1432181232,full_name:'solo/renamed-source'});await assert.rejects(f.cloud.verify('solo/renamed-source'),/repository/i);});
 test('repository reconfiguration is serialized against sync',async t=>{const f=fixture(t);await f.cloud.verify('solo/task-data');await f.cloud.enable({repositoryId:77,consent:true});f.transport.read=async()=>{await assert.rejects(f.cloud.verify('solo/task-data'),/running/i);await assert.rejects(f.cloud.enable({repositoryId:77,consent:true}),/running/i);return null;};await assert.rejects(f.cloud.sync(),/unverified/i);});
+test('disable during deferred verify invalidates late repository selection',async t=>{const f=fixture(t);f.transport.repository=async()=>{await f.cloud.disable();return repo;};await assert.rejects(f.cloud.verify('solo/task-data'),/cancelled/);await assert.rejects(f.cloud.enable({repositoryId:77,consent:true}),/Verify/);});
 module.exports={fixture,repo};

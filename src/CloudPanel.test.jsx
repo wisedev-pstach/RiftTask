@@ -3,6 +3,18 @@ import {render,screen,waitFor,act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {it,expect,vi} from 'vitest';
 import CloudPanel from './CloudPanel.jsx';
+it('creation has separate confirmation, cancellation, busy lock and does not enable cloud',async()=>{
+ let finish;const repo={id:77,full_name:'solo/task-data',owner:{id:17}};
+ const bridge={cloudStatus:vi.fn().mockResolvedValue({state:'off'}),cloudCreate:vi.fn(()=>new Promise(r=>finish=r)),cloudEnable:vi.fn(),cloudSync:vi.fn(),cloudVerify:vi.fn().mockResolvedValue(repo)};
+ const u=userEvent.setup();render(<CloudPanel bridge={bridge} account={{id:17,login:'solo'}} onWorkspace={()=>{}} onBusy={()=>{}}/>);
+ await screen.findByText(/Cloud off/);await u.click(screen.getByRole('button',{name:'Create private repository'}));await u.type(screen.getByLabelText('New repository name'),'task-data');
+ expect(screen.getByRole('button',{name:'Continue to confirmation'})).toBeDisabled();await u.click(screen.getByLabelText(/Create only this private repository/));await u.click(screen.getByRole('button',{name:'Continue to confirmation'}));
+ expect(bridge.cloudCreate).toHaveBeenCalledExactlyOnceWith({name:'task-data',consent:true});expect(screen.getByRole('button',{name:'Continue to confirmation'})).toBeDisabled();await act(async()=>finish({state:'off',cancelled:true}));expect(bridge.cloudEnable).not.toHaveBeenCalled();
+ await u.click(screen.getByRole('button',{name:'Continue to confirmation'}));await act(async()=>finish({state:'off',created:repo}));expect(await screen.findByText(/Created: solo\/task-data/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Verify repository'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Enable manual cloud'})).not.toBeInTheDocument();expect(bridge.cloudSync).not.toHaveBeenCalled();
+});
+it('creation stays locked until initial configuration is loaded',async()=>{
+ let finish;const bridge={cloudStatus:vi.fn(()=>new Promise(r=>finish=r)),cloudCreate:vi.fn()};render(<CloudPanel bridge={bridge} account={{id:17,login:'solo'}} onWorkspace={()=>{}} onBusy={()=>{}}/>);expect(screen.getByRole('button',{name:'Create private repository'})).toBeDisabled();await act(async()=>finish({state:'off'}));expect(screen.getByRole('button',{name:'Create private repository'})).toBeEnabled();expect(bridge.cloudCreate).not.toHaveBeenCalled();
+});
 it('a late initial status cannot replace a newly enabled configuration',async()=>{
  let resolveStatus;const repo={id:77,full_name:'solo/task-data',owner:{id:17}};
  const bridge={cloudStatus:vi.fn(()=>new Promise(resolve=>{resolveStatus=resolve;})),cloudVerify:vi.fn().mockResolvedValue(repo),cloudEnable:vi.fn().mockResolvedValue({state:'ready',repository:repo})};

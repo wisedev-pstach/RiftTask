@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {useAppearance} from './appearance.js';
 import CloudPanel from './CloudPanel.jsx';
 import TerminalDock from './TerminalDock.jsx';
+import StartupScreen from './StartupScreen.jsx';
 const id = () => crypto.randomUUID();
 const statuses = {backlog:'Backlog',doing:'In progress',done:'Done'};
 const blank = () => ({version:1,categories:[],projects:[],tasks:[],updatedAt:new Date().toISOString()});
@@ -106,7 +107,7 @@ export default function App({bridge: providedBridge = window.rift}) {
  async function changeStatus(task,status){await persist({...workspace,tasks:workspace.tasks.map(t=>t.id===task.id?{...t,status,completedAt:status==='done'?new Date().toISOString():null}:t)});}
  async function archiveProject(p,archived){if(await persist({...workspace,projects:workspace.projects.map(x=>x.id===p.id?{...x,archived}:x)})){setEditor(null);if(archived)navigate('all');}}
  async function deleteTask(){if(await persist({...workspace,tasks:workspace.tasks.filter(t=>t.id!==editor.item.id)}))setEditor(null);}
- if(!session)return <main className="welcome"><p role="status">Loading workspace…</p>{error&&<><p role="alert">{error}</p><button disabled={connecting} onClick={()=>connect()}>Retry loading</button></>}</main>;
+ if(!session)return <StartupScreen error={error} connecting={connecting} onRetry={()=>connect()}/>;
  if(!session.account)return <main className="welcome"><div className="brand"><img src="./icon.svg" alt=""/>RiftTask</div><h1>Your work, on this device.</h1><p>Sign in with GitHub to open your local workspace. Cloud sync is optional.</p><p>{session.ghAvailable?'Use the official GitHub CLI sign-in, then check your account here.': 'GitHub CLI is required. Install gh and run gh auth login --hostname github.com --git-protocol https --web in your terminal, then check sign-in.'}</p><details><summary>Sign-in help</summary><p>macOS / Windows: sign-in opens a native terminal. Linux: run <code>gh auth login --hostname github.com --git-protocol https --web</code>. Existing CLI accounts are reused. No tokens reach this interface.</p></details><button className="primary" disabled={connecting||session.loginPending} onClick={()=>connect('login')}>Sign in with GitHub</button><button disabled={connecting} onClick={()=>connect('checkLogin')}>Check sign-in</button>{session.loginPending&&<p role="status">Sign-in terminal opened — finish authentication there, then Check sign-in. You are not signed in yet.</p>}{connecting&&<p role="status">Waiting for account verification…</p>}{error&&<p role="alert">{error}</p>}</main>;
  const project=workspace?.projects.find(p=>`project:${p.id}`===view&&!p.archived);
  const activeProjects=workspace?.projects.filter(p=>!p.archived)||[];

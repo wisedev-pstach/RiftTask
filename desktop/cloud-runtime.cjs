@@ -2,13 +2,13 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
 const {projectCloudWorkspace,prepareCloudRestore}=require('./cloud-snapshot.cjs');
 const fingerprint=text=>{const value=JSON.parse(text);delete value.workspace.updatedAt;return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');};
-function createCloud({root,store,transport,identity}){
+function createCloud({root,store,transport,identity,confirmCreate=async()=>false}){
  let pending=null,busy=false,epoch=0;
- async function guard(s,e){const now=await context();if(e!==epoch||now.generation!==s.generation||now.account.id!==s.account.id||now.offline)throw new Error('Cloud operation cancelled: account or configuration changed.');}
+ async function guard(s,e){const now=await context();if(e!==epoch||now.generation!==s.generation||now.account.id!==s.account.id||now.account.login!==s.account.login||now.offline)throw new Error('Cloud operation cancelled: account or configuration changed.');}
  async function validateRepository(r,s,workspace,bound){
   const name=r?.full_name?.toLowerCase();
   const projectNames=workspace.projects.map(p=>p.repositoryUrl.replace(/\/$/,'').replace(/\.git$/i,'').toLowerCase());
-  if(!r||!Number.isSafeInteger(r.id)||r.id<=0||r.id===1432181232||r.private!==true||r.fork!==false||r.archived!==false||r.owner?.type!=='User'||r.owner.id!==s.account.id||!name||name==='wisedev-pstach/rifttask'||projectNames.includes('https://github.com/'+name)||!r.default_branch||r.default_branch.length>255|| (bound&&(r.id!==bound.id||r.owner.id!==bound.owner.id||r.full_name!==bound.full_name||r.default_branch!==bound.default_branch)))throw new Error('Cloud repository must be the exact dedicated personal private repository, never the source or a project repository. Verify again if it changed.');
+  if(!r||!Number.isSafeInteger(r.id)||r.id<=0||r.id===1432181232||r.private!==true||r.fork!==false||r.archived!==false||r.owner?.type!=='User'||r.owner.id!==s.account.id||!name||name==='wisedev-pstach/rifttask'||projectNames.includes('https://github.com/'+name)||typeof r.default_branch!=='string'||!r.default_branch||r.default_branch.length>255||/[\0\r\n]/.test(r.default_branch)|| (bound&&(r.id!==bound.id||r.owner.id!==bound.owner.id||r.full_name!==bound.full_name||r.default_branch!==bound.default_branch)))throw new Error('Cloud repository must be the exact dedicated personal private repository, never the source or a project repository. Verify again if it changed.');
   const linked=new Set();
   for(const project of workspace.projects){
    if(!project.repositoryUrl)continue;
@@ -39,8 +39,51 @@ function createCloud({root,store,transport,identity}){
  function read(id){const p=file(id);if(!fs.existsSync(p))return {enabled:false};try{if(fs.statSync(p).size>16384)throw 0;const c=JSON.parse(fs.readFileSync(p,'utf8'));if(!validConfig(c,id))throw 0;return c;}catch{throw new Error('Cloud configuration is invalid; disable cloud and configure again.');}}
  function save(id,c){const value={...c,version:1,accountId:id};if(!validConfig(value,id))throw new Error('Cloud configuration is invalid; disable cloud and configure again.');const p=file(id),tmp=p+'.tmp-'+crypto.randomUUID();try{fs.writeFileSync(tmp,JSON.stringify(value),{mode:0o600,flag:'wx'});fs.renameSync(tmp,p);}finally{if(fs.existsSync(tmp))fs.unlinkSync(tmp);}}
  return {
+ create:async input=>{
+  if(busy)throw new Error('Cloud operation is already running.');busy=true;pending=null;
+  let posted=false,created=null,target;
+  try{
+   const s=await context(),e=epoch;
+   if(input?.consent!==true)throw new Error('Explicit creation consent is required.');
+   if(s.offline)throw new Error('Repository creation requires an online account.');
+   const value=input.name;
+   if(typeof value!=='string'||! /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(s.account.login))throw new Error('Invalid repository name.');
+   target=value.includes('/')?value:s.account.login+'/'+value;
+   if(! /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/.test(target)||target.split('/').some(v=>v==='.'||v==='..')||target.split('/')[0]!==s.account.login)throw new Error('Use a repository name in your current personal account only.');
+   const policy=()=>{
+    // Inspect only the existing local destination-exclusion policy, never project data remotely.
+    const workspace=store.load(s.account.id);
+    if(target.toLowerCase()==='wisedev-pstach/rifttask'||workspace.projects.some(p=>p.repositoryUrl.replace(/\/$/,'').replace(/\.git$/i,'').toLowerCase()==='https://github.com/'+target.toLowerCase()))throw new Error('Cannot create a source or linked project repository for cloud.');
+    return workspace;
+   };
+   policy();if(read(s.account.id).enabled)throw new Error('Disable existing cloud before creating another repository.');
+   await guard(s,e);
+   if(await confirmCreate(target)!==true)return {state:'off',cancelled:true};
+   await guard(s,e);policy();
+   posted=true;created=await transport.createRepository(target);
+   await guard(s,e);
+   if(created.full_name?.toLowerCase()!==target.toLowerCase()||created.owner?.login?.toLowerCase()!==s.account.login.toLowerCase())throw new Error('Repository owner or name did not match.');
+   const repository=await validateRepository(created,s,policy());await guard(s,e);
+   return {state:'off',created:repository};
+  }catch(error){
+   if(!posted)throw error;
+   const knownCreated=!!created||error.createdKnown===true;
+   if(!knownCreated&&[401,403,404,422].includes(error.httpStatus)){
+    const reasons={
+     401:'GitHub authentication expired. Sign in again.',
+     403:'GitHub denied permission. Check current CLI access; no scopes were expanded.',
+     404:'GitHub endpoint not found or inaccessible. Check account access.',
+     422:'GitHub rejected repository validation; the name may already exist. Use Verify for an existing repository.'
+    };
+    throw new Error(reasons[error.httpStatus]+' Cloud was not enabled.');
+   }
+   // A remote creation cannot be rolled back safely. Never retry or delete here.
+   const outcome=knownCreated?'Repository '+target+' was created; cloud binding cancelled. ':'Repository creation may have reached GitHub; outcome unverified. ';
+   throw new Error(outcome+'Check the exact repository on GitHub before retrying. Cloud was not enabled. '+(knownCreated?'Account or repository policy must be verified again.':''));
+  }finally{busy=false;}
+ },
  status:async()=>{const s=await context(),c=read(s.account.id);return {state:c.enabled?'ready':'off',repository:c.enabled?c.repository:null};},
- verify:async name=>{if(busy)throw new Error('Cloud sync is running.');const s=await context();if(typeof name!=='string'||! /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/.test(name)||name.split('/').some(v=>v==='.'||v==='..'))throw new Error('Invalid repository: enter owner/name.');if(s.offline)throw new Error('Cloud repository verification requires an online account.');const repository=await validateRepository(await transport.repository(name),s,await store.load(s.account.id));pending={repository,accountId:s.account.id,generation:s.generation};return repository;},
+ verify:async name=>{if(busy)throw new Error('Cloud sync is running.');busy=true;pending=null;try{const s=await context(),e=epoch;if(typeof name!=='string'||! /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/.test(name)||name.split('/').some(v=>v==='.'||v==='..'))throw new Error('Invalid repository: enter owner/name.');if(s.offline)throw new Error('Cloud repository verification requires an online account.');const repository=await validateRepository(await transport.repository(name),s,await store.load(s.account.id));await guard(s,e);pending={repository,accountId:s.account.id,generation:s.generation};return repository;}finally{busy=false;}},
  enable:async input=>{if(busy)throw new Error('Cloud sync is running.');const s=await context();if(input?.consent!==true)throw new Error('Explicit consent is required.');if(!pending||pending.accountId!==s.account.id||pending.generation!==s.generation||pending.repository.id!==input.repositoryId)throw new Error('Verify the repository again.');const repository=pending.repository;save(s.account.id,{enabled:true,repository});pending=null;return {state:'ready',repository};},
  disable:async()=>{epoch++;const s=await context();pending=null;save(s.account.id,{enabled:false});return {state:'off'};},
  sync:async(input={})=>{

@@ -1,0 +1,15 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const vm=require('node:vm');
+const {createService}=require('../desktop/service.cjs');const {createCloudTransport}=require('../desktop/cloud-transport.cjs');const {createStore}=require('../desktop/store.cjs');const {registerIpc}=require('../desktop/ipc.cjs');
+test('preload to trusted IPC to service to production transport: create stays off, then independent verify and enable',async t=>{
+ const root=fs.mkdtempSync(path.join(process.env.TMPDIR,'rift-create-bridge-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const repo={id:77,name:'data',full_name:'solo/data',private:true,fork:false,archived:false,owner:{id:17,login:'solo',type:'User'},default_branch:'main'};
+ const requests=[];const transport=createCloudTransport({run:async(file,args,options)=>{requests.push({file,args,options});return JSON.stringify(repo);}});
+ let confirm=false;const targets=[];const service=createService({auth:{session:async()=>({account:{id:17,login:'solo'},offline:false})},store:createStore(root),cloudRoot:root,cloudTransport:transport,confirmCloudCreate:async target=>{targets.push(target);return confirm;}});t.after(()=>service.dispose());
+ const handlers=new Map(),frame={url:'file:///trusted/index.html'},webContents={mainFrame:frame},event={sender:webContents,senderFrame:frame};registerIpc({ipcMain:{handle:(key,value)=>handlers.set(key,value)},webContents,indexURL:frame.url,service});let bridge;
+ vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../desktop/preload.cjs'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(_name,value)=>bridge=value},ipcRenderer:{invoke:(key,...args)=>handlers.get(key)(event,...args)}})});
+ await assert.rejects(handlers.get('rift:cloudCreate')({...event,sender:{}},{name:'data',consent:true}),/Untrusted/);await assert.rejects(handlers.get('rift:cloudCreate')(event,{name:'data',consent:true},'extra'),/arguments/);
+ await assert.rejects(bridge.cloudCreate({name:'data',consent:'true'}),/consent/);assert.equal(targets.length,0);
+ assert.equal((await bridge.cloudCreate({name:'data',consent:true})).cancelled,true);assert.equal(requests.length,0);
+ confirm=true;const result=await bridge.cloudCreate({name:'data',consent:true});assert.equal(result.created.id,77);assert.deepEqual(targets,['solo/data','solo/data']);assert.equal(requests.length,2);assert.equal((await bridge.cloudStatus()).state,'off');assert.equal(fs.existsSync(path.join(root,'accounts/17/cloud.json')),false);
+ await assert.rejects(bridge.cloudEnable({repositoryId:77,consent:true}),/Verify/);await bridge.cloudVerify('solo/data');assert.equal(requests.length,3);assert.ok(requests[2].args.includes('GET'));assert.equal((await bridge.cloudStatus()).state,'off');await bridge.cloudEnable({repositoryId:77,consent:true});assert.equal((await bridge.cloudStatus()).state,'ready');assert.equal(requests.length,3);assert.equal(requests.filter(r=>r.args.includes('POST')).length,1);assert.equal(requests.filter(r=>r.args.some(v=>v.includes('/contents'))).length,0);
+});

@@ -46,10 +46,10 @@ test('sandbox-compatible preload exposes frozen narrow promise bridge without ra
     assert.equal(name,'electron');
     return {contextBridge:{exposeInMainWorld:(name,bridge)=>{assert.equal(name,'rift');exposed=bridge;}},ipcRenderer:{invoke:async (...args)=>{calls.push(args); return 'result';}}};
   }});
-  const methods=['session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
+  const methods=['session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudCreate','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
   assert.deepEqual(Object.keys(exposed).sort(),methods.sort()); assert.ok(Object.isFrozen(exposed));
   for(const name of methods) {
-    const args=name==='ptyStart'?['p']:name==='ptyRead'||name==='ptyClose'?['p','token']:name==='ptyInput'?['p','token','x']:name==='ptyResize'?['p','token',80,24]:['save','openRepository','openTerminal','gitStatus','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];
+    const args=name==='ptyStart'?['p']:name==='ptyRead'||name==='ptyClose'?['p','token']:name==='ptyInput'?['p','token','x']:name==='ptyResize'?['p','token',80,24]:['save','openRepository','openTerminal','gitStatus','cloudCreate','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];
     assert.equal(await exposed[name](...args),'result'); assert.deepEqual(calls.at(-1),['rift:'+name,...args]);
   }
   await exposed.session('ignored'); assert.deepEqual(calls.at(-1),['rift:session']);
@@ -124,6 +124,14 @@ test('main boots only local dist with locked down BrowserWindow and denies navig
   win.emit('closed');assert.equal(h.handlers.size,0);assert.equal(closes,1);
   h.electron.app.emit('activate');assert.equal(h.windows.length,2);
   h.electron.app.emit('will-quit');assert.equal(h.handlers.size,0);assert.equal(disposals,1);
+});
+test('repository creation confirmation is native, exact-target and defaults to Cancel',async()=>{
+ const h=fakeElectron();let options;h.deps.createService=value=>{options=value;return {};};let response=0;const calls=[];
+ h.electron.dialog.showMessageBox=async(win,payload)=>{calls.push(payload);assert.equal(win,h.windows[0]);return {response};};
+ await require('../desktop/main.cjs').start(h.electron,h.deps);
+ assert.equal(await options.confirmCloudCreate('solo/task-data'),false);response=1;assert.equal(await options.confirmCloudCreate('solo/task-data'),true);
+ assert.equal(calls[0].defaultId,0);assert.equal(calls[0].cancelId,0);assert.deepEqual(calls[0].buttons,['Cancel','Create private repository']);assert.match(calls[0].message,/solo\/task-data/);assert.match(calls[0].detail,/not enable|stays off/);
+ await assert.rejects(options.confirmCloudCreate('solo/data\nSECRET'),/Invalid/);assert.equal(calls.length,2);
 });
 test('chooseDirectory uses the native directory-only dialog and handles cancellation', async () => {
   const {start}=require('../desktop/main.cjs');const h=fakeElectron();

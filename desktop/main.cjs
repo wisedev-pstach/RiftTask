@@ -36,6 +36,10 @@ async function start({app,BrowserWindow,Menu,ipcMain,shell,dialog}, dependencies
   },chooseImportPath:async()=>{
     const result=await dialog.showOpenDialog(window,{title:'Import workspace backup',filters:[{name:'JSON workspace',extensions:['json']}],properties:['openFile']});
     return result.canceled ? null : result.filePaths[0] ?? null;
+  },confirmCloudCreate:async target=>{
+    if(typeof target!=='string'||! /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/.test(target)||/[\s\0]/.test(target)||target.split('/').some(v=>v==='.'||v==='..'))throw new Error('Invalid repository name.');
+    const result=await dialog.showMessageBox(window,{type:'question',title:'Create private repository?',message:'Create '+target+' on GitHub?',detail:'Creates a private personal repository initialized with a README. No tasks are uploaded. Manual cloud stays off: Verify and separate sync consent are still required. This does not expand GitHub permissions.',buttons:['Cancel','Create private repository'],defaultId:0,cancelId:0,noLink:true});
+    return result.response===1;
   },confirmRestore:async()=>{
     const result=await dialog.showMessageBox(window,{type:'warning',title:'Restore workspace backup?',message:'Replace this account’s workspace with the selected validated backup?',detail:'Existing corrupt primary and rolling backup files will first be copied unchanged into a new recovery archive in this account’s data directory. A healthy current workspace is retained as the rolling safety backup. No other account is changed.',buttons:['Cancel','Restore backup'],defaultId:0,cancelId:0,noLink:true});
     return result.response===1;
