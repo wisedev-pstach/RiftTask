@@ -107,5 +107,12 @@ if (require.main === module) {
   Promise.resolve().then(() => {
     if (process.versions.electron !== '45.0.0') throw new Error(`Native installer smoke requires Electron 45.0.0, got ${process.versions.electron || 'system Node'}.`);
     return smoke({root,platform,arch});
-  }).then(result => console.log(`Electron ${process.versions.electron} PTY verified: ${JSON.stringify(result)}`)).catch(error => { console.error(error.message); process.exitCode=1; });
+  }).then(result => {
+    // Only this isolated CLI owns process exit. smoke() has already confirmed
+    // shell exit/PID disappearance and removed its temporary directory; native
+    // worker/socket handles must not keep the installer waiting after success.
+    process.stdout.write(`Electron ${process.versions.electron} PTY verified: ${JSON.stringify(result)}\n`, error => process.exit(error ? 1 : 0));
+  }).catch(error => {
+    process.stderr.write(`${error.message}\n`, () => process.exit(1));
+  });
 }
