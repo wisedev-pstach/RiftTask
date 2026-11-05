@@ -24,7 +24,7 @@ function readBackup(source){
   try{return validateWorkspace(JSON.parse(text));}
   catch{throw new Error('Invalid backup. A valid version-1 RiftTask workspace is required; no data was replaced.');}
 }
-function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,confirmRestore=async()=>false,cloudRoot,cloudTransport,ptySpawn}) {
+function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,confirmRestore=async()=>false,cloudRoot,cloudTransport,confirmCloudCreate=async()=>false,ptySpawn}) {
   let boundAccount=null,generation=0,terminalAccount=null,terminalBlocked=false,disconnecting=false;
   const pty=require('./pty.cjs').createPty({spawn:ptySpawn,resolve:async projectId=>{
     if(typeof projectId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId))throw new Error('Invalid project ID.');
@@ -39,7 +39,7 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
   }});
   let auditing=false;
   const auditTimer=setInterval(async()=>{if(auditing||terminalAccount===null)return;auditing=true;try{await accountId();await pty.audit();}catch{pty.reset();terminalAccount=null;}finally{auditing=false;}},5000);auditTimer.unref?.();
-  const cloud=cloudRoot?require('./cloud-runtime.cjs').createCloud({root:cloudRoot,store,transport:cloudTransport||require('./cloud-transport.cjs').createCloudTransport(),identity:async()=>{const id=await accountId();const state=await auth.session();if(state.account?.id!==id)throw new Error('GitHub account changed.');return {...state,generation};}}):null;
+  const cloud=cloudRoot?require('./cloud-runtime.cjs').createCloud({root:cloudRoot,store,confirmCreate:confirmCloudCreate,transport:cloudTransport||require('./cloud-transport.cjs').createCloudTransport(),identity:async()=>{const id=await accountId();const state=await auth.session();if(state.account?.id!==id)throw new Error('GitHub account changed.');return {...state,generation};}}):null;
   const cloudCall=method=>async(...args)=>{if(!cloud)throw new Error('Cloud is unavailable.');return cloud[method](...args);};
   async function refresh(method) {
     const version=generation;if(disconnecting)throw new Error('Account disconnect is in progress.');
@@ -65,7 +65,7 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
     closeTerminals:()=>{pty.reset();terminalAccount=null;},
     dispose:()=>{clearInterval(auditTimer);pty.dispose();},
     cloudStatus:async()=>cloud?cloud.status():{state:'off'},
-    cloudVerify:cloudCall('verify'),cloudEnable:cloudCall('enable'),cloudDisable:cloudCall('disable'),cloudSync:cloudCall('sync'),
+    cloudCreate:cloudCall('create'),cloudVerify:cloudCall('verify'),cloudEnable:cloudCall('enable'),cloudDisable:cloudCall('disable'),cloudSync:cloudCall('sync'),
     session:()=>refresh('session'),
     checkLogin:()=>refresh('checkLogin'),
     login:()=>refresh('login'),

@@ -2,6 +2,7 @@
 // Keep this file self-contained: sandboxed preload can require Electron only.
 const {contextBridge,ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('rift',Object.freeze({
+  cloudCreate:input=>ipcRenderer.invoke('rift:cloudCreate',input),
   cloudStatus:()=>ipcRenderer.invoke('rift:cloudStatus'),
   cloudVerify:name=>ipcRenderer.invoke('rift:cloudVerify',name),
   cloudEnable:consent=>ipcRenderer.invoke('rift:cloudEnable',consent),
