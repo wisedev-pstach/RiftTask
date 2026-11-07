@@ -118,14 +118,14 @@ describe('workspace',()=>{
  await u.click(screen.getByRole('button',{name:'Second account project In progress 0 To do 0'}));
  expect(screen.getByRole('tab',{name:'Tasks'})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('searchbox')).toHaveValue('');
  });
- it('excludes archived projects and their tasks from tiles, categories, task forms and Today',async()=>{
+ it('excludes archived projects and their tasks from tiles, categories, task forms and In progress',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'archived',name:'Archived game',archived:true});w.tasks.push({id:'hidden',projectId:'archived',title:'Archived work',notes:'',status:'doing',priority:'normal',today:true});
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('button')).toHaveLength(1);
  expect(screen.getByRole('button',{name:'lose.DOT In progress 0 To do 0'})).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Games',exact:true}));expect(within(screen.getByRole('region',{name:'Project overview'})).queryByRole('button',{name:/Archived game/})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'New task'}));expect(within(screen.getByLabelText('Project')).queryByRole('option',{name:'Archived game'})).not.toBeInTheDocument();await u.click(screen.getByRole('button',{name:'Cancel'}));
- await u.click(screen.getByRole('button',{name:'Today',exact:true}));expect(screen.queryByRole('button',{name:'Edit task Archived work'})).not.toBeInTheDocument();
+ await u.click(screen.getByRole('button',{name:'In progress',exact:true}));expect(screen.queryByRole('button',{name:'Edit task Archived work'})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Archived projects'}));await u.click(screen.getByRole('button',{name:'Restore Archived game'}));
  await waitFor(()=>expect(api.save).toHaveBeenCalledOnce());await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
  expect(screen.getByRole('button',{name:'Archived game In progress 1 To do 0'})).toBeInTheDocument();expect(api.save.mock.lastCall[0].tasks).toEqual(w.tasks);
@@ -353,14 +353,15 @@ describe('workspace',()=>{
  await u.type(screen.getByLabelText('Notes'),'Check diagonal speed');
  await u.selectOptions(screen.getByLabelText('Priority'),'high');
  await u.type(screen.getByLabelText('Due date'),'2026-11-01');
- await u.click(screen.getByLabelText('Pin to Today'));
+ await u.selectOptions(screen.getByLabelText('Status',{exact:true}),'doing');
  await u.click(screen.getByRole('button',{name:'Save task'}));
  await screen.findByRole('button',{name:'Edit task Fix movement'});
- expect(api.save.mock.lastCall[0].tasks[0]).toMatchObject({title:'Fix movement',notes:'Check diagonal speed',priority:'high',dueDate:'2026-11-01',today:true,projectId:'project',status:'backlog'});
- await u.click(screen.getByRole('button',{name:'Today'}));
+ expect(api.save.mock.lastCall[0].tasks[0]).toMatchObject({title:'Fix movement',notes:'Check diagonal speed',priority:'high',dueDate:'2026-11-01',today:false,projectId:'project',status:'doing'});
+ await u.click(screen.getByRole('button',{name:'In progress',exact:true}));
  expect(screen.getByRole('button',{name:'Edit task Fix movement'})).toBeInTheDocument();
  await u.selectOptions(screen.getByLabelText('Status for Fix movement'),'done');
  await waitFor(()=>expect(api.save.mock.lastCall[0].tasks[0].completedAt).toBeTruthy());
+ await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.click(screen.getByRole('button',{name:'Edit task Fix movement'}));
  await u.clear(screen.getByLabelText('Task title'));await u.type(screen.getByLabelText('Task title'),'Fix controller');
  await u.click(screen.getByRole('button',{name:'Save task'}));

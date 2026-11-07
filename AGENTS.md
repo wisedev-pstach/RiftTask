@@ -18,6 +18,9 @@ All methods return Promises. Renderer MUST NOT import Node.
 - save(workspace): validated persisted Workspace
 - chooseDirectory(): string|null (native dialog)
 - openRepository(url): void (validated HTTPS GitHub/Azure DevOps only)
+- openProgressLink(url): void (explicit click only; credential-free HTTP/HTTPS, ≤2048 characters; exact trusted main-frame and argument validation)
+- cloudStatus(), cloudCreate({name,consent:true}), cloudVerify(name), cloudEnable({repositoryId,consent:true}), cloudDisable(), cloudSync({pullSha?}): manual opt-in cloud operations; never transfer on sign-in or setup alone.
+- ptyStart(projectId), ptyRead(projectId,sessionId), ptyInput(projectId,sessionId,data), ptyResize(projectId,sessionId,cols,rows), ptyClose(projectId,sessionId): retained project-scoped native shell; persisted directory and verified identity only.
 - openTerminal(projectId): void (path taken from persisted workspace, never renderer-supplied shell text)
 - gitStatus(projectId): {branch:string,changed:number}|null (only explicit request, no fetch)
 - exportBackup(): boolean (native save dialog)
@@ -28,7 +31,14 @@ Legacy version-1 input with exact status `next` is accepted and normalized to `b
 
 Blank account starts empty. Version-1 workspaces may additionally contain `milestones:[{id,projectId,name,color}]` and task `milestoneId` (empty string = unassigned). These optional fields are preserved; old v1 files lacking them remain valid and are not rewritten on load. Labels require an existing project, unique safe IDs, name ≤200 characters, hex color; assigned tasks must reference a milestone in the same project. No implicit deletion of labels/assignments. Cloud canonical snapshots preserve both fields; old clients fail closed on unsupported milestone data rather than silently stripping it.
 
-Blank account starts empty. Optional explicit sample workspace button can seed Games / lose.DOT, clearly labeled sample and never pretend imported data. Renderer builds IDs with crypto.randomUUID. Core normalizes/validates values with limits, referential integrity and safe IDs. Categories/projects with descendants cannot silently delete them: explicit confirmation/cascade or archive. Task UI: create/edit/delete, status, priority, due, notes, Today pin; category/project create/edit; search, Today, all tasks, board/list; empty/error/loading states; keyboard-friendly forms; project context for repository and terminal.
+Blank account starts empty. Optional explicit sample workspace button can seed Games / lose.DOT, clearly labeled sample and never pretend imported data. Renderer builds IDs with crypto.randomUUID. Core normalizes/validates values with limits, referential integrity and safe IDs. Categories/projects with descendants cannot silently delete them: explicit confirmation/cascade or archive. Task UI: create/edit/delete, status, priority, due, notes and separate task progress; category/project create/edit with built-in icons; independent category collapse; search, all-active-project In progress (status doing, not legacy Today pins), project overview, board/list; empty/error/loading states; keyboard-friendly forms; project context for repository and terminal.
+
+## Optional project/progress fields
+Projects may carry `icon` from `desktop/project-icons.json`; absence uses a renderer-only default. Tasks may carry `progress:[{id,createdAt,body,links,images?,imageCount?}]`. See `docs/PROJECT-PROGRESS.md` for limits and security rules. Absence remains absent; never rewrite a legacy workspace on load. Preserve legacy `today` values without showing obsolete pin controls/badges.
+
+Progress Markdown is a literal bounded string; render only allowlisted React AST nodes from pinned marked tokens. Never use innerHTML, remote Markdown images or automatic previews. Explicit HTTP(S) URLs use the narrow opener; clipboard copy is user-triggered. PNG/JPEG/WebP inline image data is LOCAL and included in backups, excluded entirely (including names and IDs) from cloud projection; only counts travel. Strict remote canonical comparison rejects image payload fields rather than silently stripping them. Restore images only for matching project/task/entry IDs, and run final workspace size validation.
+
+Category collapse is localStorage UI state under `rifttask:collapsed:<positive numeric account ID>`, never workspace/cloud data. Retain TerminalDock across settings/project navigation.
 
 ## Ownership while building
 - Backend agent: desktop/core.cjs, desktop/store.cjs, desktop/auth.cjs and corresponding tests only; docs/backend-evidence.md.

@@ -30,6 +30,7 @@ test('IPC only dispatches basic service methods from exact trusted main frame', 
   await assert.rejects(h.handlers.get('rift:session')(h.event,'unexpected'),/arguments/);
   h.dispose(); assert.equal(h.handlers.size,0);
 });
+test('progress opener accepts only explicit credential-free HTTP(S) from trusted main frame',async()=>{const h=harness(),open=h.handlers.get('rift:openProgressLink');assert.equal(typeof open,'function');for(const url of ['https://example.com/build?x=1#notes','http://localhost:3000/']){await open(h.event,url);assert.deepEqual(h.calls.at(-1),['external',url]);}for(const url of ['javascript:alert(1)','data:text/html,x','file:///a','https://user:secret@example.com','https://example.com/\nsecret','https:\\example.com',null,{},'https://example.com/'+'x'.repeat(2048)]){await assert.rejects(open(h.event,url),/progress link/);}await assert.rejects(open(h.event,'https://example.com','extra'),/arguments/);await assert.rejects(open({...h.event,senderFrame:{url:indexURL}},'https://example.com'),/Untrusted/);});
 test('openRepository accepts only credential-free HTTPS provider repository URLs', async () => {
   const h=harness(); const open=h.handlers.get('rift:openRepository');
   for(const url of ['https://github.com/owner/repo','https://dev.azure.com/org/project/_git/repo','https://org.visualstudio.com/project/_git/repo']) {
@@ -46,10 +47,10 @@ test('sandbox-compatible preload exposes frozen narrow promise bridge without ra
     assert.equal(name,'electron');
     return {contextBridge:{exposeInMainWorld:(name,bridge)=>{assert.equal(name,'rift');exposed=bridge;}},ipcRenderer:{invoke:async (...args)=>{calls.push(args); return 'result';}}};
   }});
-  const methods=['session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudCreate','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
+  const methods=['session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openProgressLink','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudCreate','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
   assert.deepEqual(Object.keys(exposed).sort(),methods.sort()); assert.ok(Object.isFrozen(exposed));
   for(const name of methods) {
-    const args=name==='ptyStart'?['p']:name==='ptyRead'||name==='ptyClose'?['p','token']:name==='ptyInput'?['p','token','x']:name==='ptyResize'?['p','token',80,24]:['save','openRepository','openTerminal','gitStatus','cloudCreate','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];
+    const args=name==='ptyStart'?['p']:name==='ptyRead'||name==='ptyClose'?['p','token']:name==='ptyInput'?['p','token','x']:name==='ptyResize'?['p','token',80,24]:['save','openRepository','openProgressLink','openTerminal','gitStatus','cloudCreate','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];
     assert.equal(await exposed[name](...args),'result'); assert.deepEqual(calls.at(-1),['rift:'+name,...args]);
   }
   await exposed.session('ignored'); assert.deepEqual(calls.at(-1),['rift:session']);

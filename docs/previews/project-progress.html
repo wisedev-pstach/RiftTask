@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><base href="/"><title>RiftTask — simulated bridge / example data</title><div id="root"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import App from '/src/App.jsx';
+import '/src/styles.css';
+const updatedAt='2026-11-07T12:00:00.000Z';
+const fixture={version:1,updatedAt,categories:[{id:'games',name:'Games',color:'#c8ff63'},{id:'tools',name:'Tools',color:'#79bbaa'}],projects:[{id:'prototype',categoryId:'games',name:'Lunar prototype',icon:'game',description:'Example project · movement and exploration',repositoryUrl:'',localPath:'',archived:false},{id:'website',categoryId:'tools',name:'Launch website',icon:'globe',description:'Example project · release preparation',repositoryUrl:'',localPath:'',archived:false}],tasks:[{id:'movement',projectId:'prototype',title:'Polish player movement',notes:'Task description stays separate from progress.',status:'doing',priority:'high',dueDate:'',today:true,createdAt:updatedAt,completedAt:null},{id:'web',projectId:'website',title:'Prepare the release page',notes:'Example task',status:'doing',priority:'normal',dueDate:'',today:false,createdAt:updatedAt,completedAt:null},{id:'backlog',projectId:'prototype',title:'Explore more biomes',notes:'',status:'backlog',priority:'normal',dueDate:'',today:false,createdAt:updatedAt,completedAt:null}]};
+let workspace=structuredClone(fixture);
+window.__simulated={get workspace(){return workspace;},opened:[],saved:0};
+const bridge={preview:true,session:async()=>({account:{id:424242,login:'Simulated preview'},offline:false,ghAvailable:false}),load:async()=>structuredClone(workspace),save:async next=>{workspace=structuredClone(next);window.__simulated.saved++;return structuredClone(workspace);},openProgressLink:async url=>{window.__simulated.opened.push(url);}};
+createRoot(document.getElementById('root')).render(React.createElement(App,{bridge}));
+</script></html>

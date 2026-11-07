@@ -1,0 +1,4 @@
+import {it,expect} from 'vitest';
+import {convertProgressImage} from './progress-images.js';
+it('rejects active formats, empty/oversize inputs and forged raster MIME before decoding',async()=>{for(const file of [new File(['<svg/>'],'a.svg',{type:'image/svg+xml'}),new File([],'empty.png',{type:'image/png'}),new File([new Uint8Array(5*1024*1024+1)],'large.png',{type:'image/png'}),new File(['<html>'],'forged.png',{type:'image/png'})])await expect(convertProgressImage(file)).rejects.toThrow(/PNG|raster/);});
+it('reports decoder failure rather than saving malformed images',async()=>{const Original=globalThis.Image;globalThis.Image=class{set src(value){queueMicrotask(()=>this.onerror());}};try{await expect(convertProgressImage(new File([new Uint8Array([137,80,78,71,13,10,26,10])],'broken.png',{type:'image/png'}))).rejects.toThrow(/decoded/);}finally{globalThis.Image=Original;}});
