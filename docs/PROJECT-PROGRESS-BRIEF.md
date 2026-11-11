@@ -1,6 +1,9 @@
 # Project icons and task progress
 
-## Current request (PR11 follow-up)
+## Current request (project customization, 0.3.0)
+Custom single-emoji project icons alongside the eight presets; compact project cards with live category/color and all four state counts; separate card Edit plus visible project Edit controls. Explain native/browser/busy/missing-folder terminal states, explicit folder editor recovery and saved-path native validation (never guess a macOS replacement for a Windows path). Fence late directory-picker completion to its original workspace/editor. macOS project PTY uses fixed `/bin/zsh -f`, with Linux Bash/Windows PowerShell unchanged; Bash source installers remain Bash. Show the installed version via zero-argument trusted metadata IPC and report actual source HEAD/package version for main and pinned source installs. Clarify no published GitHub releases, main is a source-build preview. Preserve cloud redaction, strict unknown-field checks, legacy pins, four stages and retained sessions; custom emoji requires all syncing clients updated. No publication/native install/live cloud; parent review then PR-only.
+
+## Prior request (PR11 follow-up)
 Replace Today with global In progress showing only `doing` tasks across active projects, independent of legacy pins/due dates. Add an All categories / specific category filter, honest empty states and account/stale-category reset. Add persisted `review` (In review) between doing and done across task UI, strict storage/backup/cloud validation, preserving rich progress, icons, local images and legacy values. Update all clients before syncing review tasks: 0.1.1 rejects this new enum. Target 0.2.0; no schema-envelope migration, publication or real account access.
 
 ## Original request

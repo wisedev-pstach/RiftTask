@@ -78,6 +78,7 @@ test('directories, reparse points and corrupt existing shortcuts are not overwri
  }
 });
 
+test('Windows source metadata is reported on main and invalid source metadata refuses installation',options,t=>{const f=fixture(t);fs.rmSync(f.dest,{recursive:true});const r=f.run({RIFT_MODE:'Install'});assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes('Source commit: '+'1'.repeat(40)));assert.ok(r.stdout.includes('Source package version: 0.3.0'));assert.ok(r.stdout.includes('Installed package version: 0.3.0'));for(const env of [{RIFT_BAD_HEAD:'invalid'},{RIFT_BAD_VERSION:'invalid'}]){const bad=fixture(t);fs.rmSync(bad.dest,{recursive:true});const result=bad.run({RIFT_MODE:'Install',...env});assert.notEqual(result.status,0);assert.equal(fs.existsSync(bad.dest),false);assert.doesNotMatch(result.stdout,/installation complete/);}});
 test('fresh installation registers the copied executable automatically and cleans only owned build files',options,t=>{
  const f=fixture(t);fs.rmSync(f.dest,{recursive:true});const r=f.run({RIFT_MODE:'Install'});assert.equal(r.status,0,r.stdout+r.stderr);
  assert.equal(JSON.parse(fs.readFileSync(f.link)).TargetPath,path.join(f.dest,'RiftTask.exe'));

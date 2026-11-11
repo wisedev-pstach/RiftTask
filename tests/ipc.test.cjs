@@ -14,6 +14,7 @@ function harness() {
   const dispose = registerIpc({ipcMain:{handle:(k,v)=>handlers.set(k,v),removeHandler:k=>handlers.delete(k)},webContents,indexURL,service,shell:{openExternal:async url=>calls.push(['external',url])}});
   return {handlers,calls,dispose,webContents,event:{sender:webContents,senderFrame:frame}};
 }
+test('installed version is a zero-argument trusted-main-frame metadata read',async()=>{const h=fakeElectron();h.electron.app.getVersion=()=> '0.3.0';await require('../desktop/main.cjs').start(h.electron,h.deps);const win=h.windows[0],event={sender:win.webContents,senderFrame:win.webContents.mainFrame};const get=h.handlers.get('rift:getVersion');assert.equal(typeof get,'function');assert.equal(await get(event),'0.3.0');await assert.rejects(get(event,'/arbitrary/executable'),/arguments/);await assert.rejects(get({...event,senderFrame:{url:indexURL}}),/Untrusted/);});
 test('IPC only dispatches basic service methods from exact trusted main frame', async () => {
   const h=harness();
   for (const name of ['session','login','checkLogin','logout','load']) {assert.deepEqual(await h.handlers.get('rift:'+name)(h.event),{ok:name});await assert.rejects(h.handlers.get('rift:'+name)(h.event,'renderer-command'),/arguments/);await assert.rejects(h.handlers.get('rift:'+name)({...h.event,sender:{}}),/Untrusted/);}
@@ -47,7 +48,7 @@ test('sandbox-compatible preload exposes frozen narrow promise bridge without ra
     assert.equal(name,'electron');
     return {contextBridge:{exposeInMainWorld:(name,bridge)=>{assert.equal(name,'rift');exposed=bridge;}},ipcRenderer:{invoke:async (...args)=>{calls.push(args); return 'result';}}};
   }});
-  const methods=['session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openProgressLink','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudCreate','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
+  const methods=['getVersion','session','login','checkLogin','logout','load','save','chooseDirectory','openRepository','openProgressLink','openTerminal','gitStatus','exportBackup','importBackup','cloudStatus','cloudCreate','cloudVerify','cloudEnable','cloudDisable','cloudSync','ptyStart','ptyRead','ptyInput','ptyResize','ptyClose'];
   assert.deepEqual(Object.keys(exposed).sort(),methods.sort()); assert.ok(Object.isFrozen(exposed));
   for(const name of methods) {
     const args=name==='ptyStart'?['p']:name==='ptyRead'||name==='ptyClose'?['p','token']:name==='ptyInput'?['p','token','x']:name==='ptyResize'?['p','token',80,24]:['save','openRepository','openProgressLink','openTerminal','gitStatus','cloudCreate','cloudVerify','cloudEnable','cloudSync'].includes(name)?['value']:[];

@@ -10,6 +10,7 @@ export function bridge(workspace = {version:1,categories:[],projects:[],tasks:[]
  return {session:vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true}),login:vi.fn().mockResolvedValue({account,offline:false,ghAvailable:true}),load:vi.fn().mockResolvedValue(workspace),save:vi.fn(async w=>structuredClone(w)),logout:vi.fn().mockResolvedValue(),chooseDirectory:vi.fn().mockResolvedValue('/work/game'),openRepository:vi.fn().mockResolvedValue(),openTerminal:vi.fn().mockResolvedValue(),exportBackup:vi.fn().mockResolvedValue(true),importBackup:vi.fn().mockResolvedValue(null)};
 }
 async function accountSettings(u=userEvent){await u.click(screen.getByRole('button',{name:'Settings',exact:true}));await u.click(screen.getByRole('tab',{name:'Account & backups'}));}
+function cardOpen(name,doing,backlog){const card=screen.getByRole('article',{name});expect(within(card).getByText(`In progress ${doing}`)).toBeInTheDocument();expect(within(card).getByText(`Backlog ${backlog}`)).toBeInTheDocument();return within(card).getByRole('button',{name:`Open project ${name}`});}
 const populated = () => ({version:1,categories:[{id:'cat',name:'Games',color:'#c99a59'}],projects:[{id:'project',categoryId:'cat',name:'lose.DOT',description:'',repositoryUrl:'https://github.com/test/game',localPath:'/work/game',archived:false}],tasks:[],updatedAt:new Date().toISOString()});
 describe('workspace',()=>{
  it('starts native login but keeps pending unauthenticated and Check sign-in verification-only',async()=>{
@@ -27,8 +28,8 @@ describe('workspace',()=>{
  render(<App bridge={bridge(w)}/>);
  await screen.findByRole('heading',{name:'Projects'});
  const tiles=screen.getByRole('region',{name:'Project overview'});
- expect(within(tiles).getByRole('button',{name:'lose.DOT In progress 1 To do 1'})).toBeInTheDocument();
- expect(within(tiles).getByRole('button',{name:'Other project In progress 0 To do 0'})).toBeInTheDocument();
+ expect(cardOpen('lose.DOT',1,1)).toBeInTheDocument();
+ expect(cardOpen('Other project',0,0)).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Edit task Private doing'})).not.toBeInTheDocument();
  });
  it('filters category tiles and opens isolated project tasks without carrying search across projects',async()=>{
@@ -37,8 +38,8 @@ describe('workspace',()=>{
  const u=userEvent.setup();render(<App bridge={bridge(w)}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'Games',exact:true}));
  expect(screen.getByRole('heading',{name:'Games'})).toBeInTheDocument();
- expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('button')).toHaveLength(1);
- await u.click(within(screen.getByRole('region',{name:'Project overview'})).getByRole('button',{name:/lose.DOT/}));
+ expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('article')).toHaveLength(1);
+ await u.click(within(screen.getByRole('region',{name:'Project overview'})).getByRole('button',{name:'Open project lose.DOT'}));
  expect(screen.getByRole('button',{name:'Edit task Only lose.DOT'})).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Edit task Only Other project'})).not.toBeInTheDocument();
  await u.type(screen.getByRole('searchbox',{name:'Search tasks'}),'lose.DOT');
@@ -46,15 +47,15 @@ describe('workspace',()=>{
  expect(screen.getByRole('button',{name:'Edit task Only Other project'})).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Edit task Only lose.DOT'})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Work',exact:true}));
- expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('button')).toHaveLength(1);
+ expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('article')).toHaveLength(1);
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
- expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('button')).toHaveLength(2);
+ expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('article')).toHaveLength(2);
  });
  it('offers real Tasks and Project details tabs, keeping interim integrations out of task view',async()=>{
  const u=userEvent.setup();render(<App bridge={bridge(populated())}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  expect(screen.getByRole('tab',{name:'Tasks'})).toHaveAttribute('aria-selected','true');
- expect(screen.queryByRole('button',{name:'Edit project'})).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Edit project lose.DOT'})).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Open repository'})).not.toBeInTheDocument();
  expect(screen.getAllByRole('tab').map(t=>t.textContent)).toEqual(['Tasks','Milestones','Project details']);
  await u.click(screen.getByRole('tab',{name:'Project details'}));
@@ -78,18 +79,18 @@ describe('workspace',()=>{
  expect(await screen.findByRole('heading',{name:'Other project'})).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Edit task Scoped task'})).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
- expect(screen.getByRole('button',{name:'Other project In progress 0 To do 1'})).toBeInTheDocument();
- await u.click(screen.getByRole('button',{name:'Other project In progress 0 To do 1'}));
+ expect(cardOpen('Other project',0,1)).toBeInTheDocument();
+ await u.click(cardOpen('Other project',0,1));
  await u.selectOptions(screen.getByLabelText('Status for Scoped task'),'doing');
  await waitFor(()=>expect(screen.getByLabelText('Status for Scoped task')).toHaveValue('doing'));
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
- expect(screen.getByRole('button',{name:'Other project In progress 1 To do 0'})).toBeInTheDocument();
- expect(screen.getByRole('button',{name:'lose.DOT In progress 0 To do 0'})).toBeInTheDocument();
- await u.click(screen.getByRole('button',{name:'Other project In progress 1 To do 0'}));
+ expect(cardOpen('Other project',1,0)).toBeInTheDocument();
+ expect(cardOpen('lose.DOT',0,0)).toBeInTheDocument();
+ await u.click(cardOpen('Other project',1,0));
  await u.click(screen.getByRole('button',{name:'Edit task Scoped task'}));await u.selectOptions(screen.getByLabelText('Status',{exact:true}),'done');await u.click(screen.getByRole('button',{name:'Save task'}));
  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
- expect(screen.getByRole('button',{name:'Other project In progress 0 To do 0'})).toBeInTheDocument();
+ expect(cardOpen('Other project',0,0)).toBeInTheDocument();
  });
  it('keeps project tiles in a wrapping grid and category navigation visible without hover',()=>{
  const style=document.createElement('style');style.textContent=styles;document.head.append(style);
@@ -104,31 +105,31 @@ describe('workspace',()=>{
  let stored=populated();stored.projects.push({...stored.projects[0],id:'other',name:'Other project'});
  const api=bridge();api.load.mockImplementation(async()=>structuredClone(stored));api.save.mockImplementation(async next=>{stored=structuredClone(next);return structuredClone(stored);});
  const u=userEvent.setup();const first=render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
- await u.click(screen.getByRole('button',{name:'Other project In progress 0 To do 0'}));
+ await u.click(cardOpen('Other project',0,0));
  await u.click(screen.getByRole('button',{name:'New task'}));await u.type(screen.getByLabelText('Task title'),'Persisted work');await u.selectOptions(screen.getByLabelText('Status',{exact:true}),'doing');await u.click(screen.getByRole('button',{name:'Save task'}));
  await screen.findByRole('button',{name:'Edit task Persisted work'});first.unmount();
  render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
- expect(screen.getByRole('button',{name:'Other project In progress 1 To do 0'})).toBeInTheDocument();expect(api.load).toHaveBeenCalledTimes(2);
- await u.click(screen.getByRole('button',{name:'Other project In progress 1 To do 0'}));await u.type(screen.getByRole('searchbox'),'Persisted');await u.click(screen.getByRole('tab',{name:'Project details'}));
+ expect(cardOpen('Other project',1,0)).toBeInTheDocument();expect(api.load).toHaveBeenCalledTimes(2);
+ await u.click(cardOpen('Other project',1,0));await u.type(screen.getByRole('searchbox'),'Persisted');await u.click(screen.getByRole('tab',{name:'Project details'}));
  await accountSettings(u);await u.click(screen.getByRole('button',{name:'Disconnect account'}));await screen.findByRole('heading',{name:'Your work, on this device.'});
  stored=populated();stored.projects[0].name='Second account project';api.login.mockResolvedValue({account:{id:2,login:'second'},offline:false,ghAvailable:true});
  await u.click(screen.getByRole('button',{name:'Sign in with GitHub'}));await screen.findByRole('heading',{name:'Projects'});
- expect(screen.getByRole('button',{name:'Second account project In progress 0 To do 0'})).toBeInTheDocument();
+ expect(cardOpen('Second account project',0,0)).toBeInTheDocument();
  expect(screen.queryByText('Other project')).not.toBeInTheDocument();expect(screen.queryByRole('tab')).not.toBeInTheDocument();
- await u.click(screen.getByRole('button',{name:'Second account project In progress 0 To do 0'}));
+ await u.click(cardOpen('Second account project',0,0));
  expect(screen.getByRole('tab',{name:'Tasks'})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('searchbox')).toHaveValue('');
  });
  it('excludes archived projects and their tasks from tiles, categories, task forms and In progress',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'archived',name:'Archived game',archived:true});w.tasks.push({id:'hidden',projectId:'archived',title:'Archived work',notes:'',status:'doing',priority:'normal',today:true});
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
- expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('button')).toHaveLength(1);
- expect(screen.getByRole('button',{name:'lose.DOT In progress 0 To do 0'})).toBeInTheDocument();
+ expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('article')).toHaveLength(1);
+ expect(cardOpen('lose.DOT',0,0)).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Games',exact:true}));expect(within(screen.getByRole('region',{name:'Project overview'})).queryByRole('button',{name:/Archived game/})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'New task'}));expect(within(screen.getByLabelText('Project')).queryByRole('option',{name:'Archived game'})).not.toBeInTheDocument();await u.click(screen.getByRole('button',{name:'Cancel'}));
  await u.click(screen.getByRole('button',{name:'In progress',exact:true}));expect(screen.queryByRole('button',{name:'Edit task Archived work'})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Archived projects'}));await u.click(screen.getByRole('button',{name:'Restore Archived game'}));
  await waitFor(()=>expect(api.save).toHaveBeenCalledOnce());await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
- expect(screen.getByRole('button',{name:'Archived game In progress 1 To do 0'})).toBeInTheDocument();expect(api.save.mock.lastCall[0].tasks).toEqual(w.tasks);
+ expect(cardOpen('Archived game',1,0)).toBeInTheDocument();expect(api.save.mock.lastCall[0].tasks).toEqual(w.tasks);
  });
  it('supports keyboard navigation between all project feature tabs',async()=>{
  const u=userEvent.setup();render(<App bridge={bridge(populated())}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
@@ -140,10 +141,10 @@ describe('workspace',()=>{
  it('isolates projects whose imported identifiers match workspace route names',async()=>{
  const w=populated();w.projects=[{...w.projects[0],id:'today',name:'Reserved ID project'}, {...w.projects[0],id:'all',name:'Another reserved project'}];w.tasks=w.projects.map(p=>({id:`task-${p.id}`,projectId:p.id,title:`Task ${p.id}`,notes:'',status:'backlog',priority:'normal',today:true}));
  const u=userEvent.setup();render(<App bridge={bridge(w)}/>);await screen.findByRole('heading',{name:'Projects'});
- await u.click(screen.getByRole('button',{name:'Reserved ID project In progress 0 To do 1'}));
+ await u.click(cardOpen('Reserved ID project',0,1));
  expect(screen.getByRole('button',{name:'Edit task Task today'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Edit task Task all'})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Projects',exact:true}));expect(screen.getByRole('heading',{name:'Projects'})).toBeInTheDocument();
- await u.click(screen.getByRole('button',{name:'Another reserved project In progress 0 To do 1'}));expect(screen.getByRole('button',{name:'Edit task Task all'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Edit task Task today'})).not.toBeInTheDocument();
+ await u.click(cardOpen('Another reserved project',0,1));expect(screen.getByRole('button',{name:'Edit task Task all'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Edit task Task today'})).not.toBeInTheDocument();
  });
  it('marks only the In progress board heading as active',async()=>{
  const w=populated();w.tasks.push({id:'task',projectId:'project',title:'Work',notes:'',status:'doing',priority:'normal',dueDate:'',today:false,createdAt:'2026-10-01T12:00:00.000Z',completedAt:null});
@@ -253,7 +254,7 @@ describe('workspace',()=>{
  const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.selectOptions(screen.getByLabelText('Status for Ship build'),'done');
  expect(await screen.findByRole('alert')).toHaveTextContent('Write denied');expect(screen.getByLabelText('Status for Ship build')).toHaveValue('doing');
- await u.click(screen.getByRole('button',{name:'Projects',exact:true}));expect(screen.getByRole('button',{name:'lose.DOT In progress 1 To do 0'})).toBeInTheDocument();
+ await u.click(screen.getByRole('button',{name:'Projects',exact:true}));expect(cardOpen('lose.DOT',1,0)).toBeInTheDocument();
  });
  it('explains missing GitHub CLI and offers check sign-in after verification fails',async()=>{
  const api=bridge();api.session.mockResolvedValue({account:null,offline:false,ghAvailable:false});api.checkLogin=vi.fn().mockRejectedValueOnce(new Error('Finish sign-in in your terminal')).mockResolvedValue({account,offline:false,ghAvailable:true});
@@ -281,7 +282,7 @@ describe('workspace',()=>{
  await screen.findByRole('alert');expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();await accountSettings();expect(screen.getByRole('button',{name:'Export backup'})).toBeDisabled();
  await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();expect(screen.getByRole('dialog')).toHaveTextContent(/corrupt originals.*recovery archive/i);await u.click(screen.getByRole('button',{name:'Cancel'}));expect(api.importBackup).not.toHaveBeenCalled();
  await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));expect(screen.getByRole('button',{name:'New category'})).toBeDisabled();
- await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));await screen.findByRole('button',{name:'lose.DOT In progress 0 To do 0'});expect(api.save).not.toHaveBeenCalled();
+ await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));await screen.findByRole('button',{name:'Open project lose.DOT'});cardOpen('lose.DOT',0,0);expect(api.save).not.toHaveBeenCalled();
  });
  it('recovers from load failure without replacing data with an empty workspace',async()=>{
  const api=bridge();api.load.mockRejectedValueOnce(new Error('Workspace unreadable'));
@@ -310,7 +311,7 @@ describe('workspace',()=>{
  await accountSettings(u);await u.click(screen.getByRole('button',{name:'Import backup'}));expect(api.importBackup).not.toHaveBeenCalled();
  await u.click(screen.getByRole('button',{name:'Choose backup to restore'}));
  expect(await screen.findByRole('button',{name:'Restored game'})).toBeInTheDocument();
- expect(screen.getByRole('heading',{name:'Projects'})).toBeInTheDocument();expect(screen.getByRole('button',{name:'Restored game In progress 0 To do 0'})).toBeInTheDocument();expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'Projects'})).toBeInTheDocument();expect(cardOpen('Restored game',0,0)).toBeInTheDocument();expect(screen.queryByRole('tab')).not.toBeInTheDocument();
  });
  it('archives a project without deleting its tasks and can restore it',async()=>{
  const api=bridge(populated());const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});

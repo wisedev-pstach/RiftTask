@@ -44,8 +44,9 @@ if(cmd==='git' && e.LOCAL_SOURCE) {
  const actual=args[0]==='clone'?args.map(a=>a==='https://github.com/wisedev-pstach/RiftTask.git'?e.LOCAL_SOURCE:a):args;
  const r=require('node:child_process').spawnSync(e.REAL_GIT,actual,{env:e,encoding:'utf8'});process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');process.exit(r.status??1);
 }
+if(cmd==='git' && args[0]==='rev-parse') {console.log(e.BAD_HEAD || '1'.repeat(40));process.exit(0);}
 if(cmd==='git' && args[0]==='clone') {
-  const dest=args.at(-1); fs.mkdirSync(dest,{recursive:true});
+  const dest=args.at(-1); fs.mkdirSync(dest,{recursive:true});fs.writeFileSync(path.join(dest,'package.json'),JSON.stringify({version:e.BAD_VERSION||'0.3.0'}));
   fs.mkdirSync(path.join(dest,'scripts'),{recursive:true});fs.copyFileSync(path.join(e.REAL_ROOT,'scripts/install-deploy.cjs'),path.join(dest,'scripts/install-deploy.cjs'));fs.symlinkSync(path.join(e.REAL_ROOT,'node_modules'),path.join(dest,'node_modules'));
   fs.mkdirSync(path.join(dest,'release','linux-unpacked'),{recursive:true});
   fs.writeFileSync(path.join(dest,'release','linux-unpacked','stale'),'stale');
@@ -155,6 +156,7 @@ test('PowerShell source contract: supported Node and per-user-only shortcut regi
   assert.doesNotMatch(s,/CommonPrograms|CommonDesktop|HKLM:|HKEY_LOCAL_MACHINE|RunAs/);
 });
 const posix = {skip: process.platform === 'win32' ? 'POSIX installer requires Bash' : false};
+test('source installs report validated actual main HEAD, package version and exact launch path; invalid metadata stops before npm',posix,t=>{const f=fixture(t);const r=f.run(['--dest',f.dest]);assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes('Source commit: '+'1'.repeat(40)));assert.ok(r.stdout.includes('Source package version: 0.3.0'));assert.ok(r.stdout.includes('Installed package version: 0.3.0'));assert.ok(r.stdout.includes(f.dest));for(const overrides of [{BAD_HEAD:'not-a-hash'},{BAD_VERSION:'not-a-version'}]){const bad=fixture(t,overrides),result=bad.run(['--dest',bad.dest]);assert.notEqual(result.status,0);assert.equal(bad.calls().some(c=>c[0]==='npm'&&c[1]==='ci'),false);assert.equal(fs.existsSync(bad.dest),false);}});
 test('macOS installer uses script-free ci, exact runtime arch preparation, and disables packaging rebuild', posix, t => {
  const f=fixture(t,{FIXTURE_OS:'Darwin',ARCH:'arm64',npm_config_build_from_source:'true'});
  const r=f.run(['--dest',path.join(f.dir,'new.app')]);
@@ -271,7 +273,7 @@ test('public isolated source build uses main with gh absent and authentication u
     const r=spawnSync(git,args,{cwd:remote,env:gitEnv,encoding:'utf8'});
     assert.equal(r.status,0,r.stderr);return r.stdout;
   };
-  run(['init','-b','main']);fs.writeFileSync(path.join(remote,'ref-marker'),'main');
+  run(['init','-b','main']);fs.writeFileSync(path.join(remote,'package.json'),JSON.stringify({version:'0.3.0'}));fs.writeFileSync(path.join(remote,'ref-marker'),'main');
   run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','main']);
   run(['checkout','-b','feat/cloud-persistence']);fs.writeFileSync(path.join(remote,'ref-marker'),'feature');
   run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','feature']);
@@ -292,7 +294,7 @@ test('missing destination option value fails actionably before commands', posix,
 test('source commit pin is fetched, checked out detached and verified before building (real Git fixture)',posix,t=>{
  const f=fixture(t);const git=executable('git');const remote=path.join(f.dir,'pin-source');fs.mkdirSync(remote);const gitEnv={...f.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:path.join(f.dir,'no-config'),GIT_ALLOW_PROTOCOL:'file'};
  const run=args=>{const r=spawnSync(git,args,{cwd:remote,env:gitEnv,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
- run(['init','-b','main']);fs.writeFileSync(path.join(remote,'ref-marker'),'feature');run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','pinned']);const pin=run(['rev-parse','HEAD']);
+ run(['init','-b','main']);fs.writeFileSync(path.join(remote,'package.json'),JSON.stringify({version:'0.3.0'}));fs.writeFileSync(path.join(remote,'ref-marker'),'feature');run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','pinned']);const pin=run(['rev-parse','HEAD']);
  fs.writeFileSync(path.join(remote,'ref-marker'),'wrong-tip');run(['add','.']);run(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','moving tip']);
  Object.assign(f.env,gitEnv,{LOCAL_SOURCE:require('node:url').pathToFileURL(remote).href,REAL_GIT:git});const r=f.run(['--ref',pin,'--dest',f.dest]);assert.equal(r.status,0,r.stdout+r.stderr);assert.ok(r.stdout.includes(pin));assert.equal(fs.existsSync(path.join(f.dest,'rifttask')),true);
  const bad=fixture(t);const result=bad.run(['--ref','--upload-pack=injected']);assert.notEqual(result.status,0);assert.deepEqual(bad.calls(),[]);

@@ -1,0 +1,4 @@
+{
+  "maxLength": 64,
+  "pattern": "^(?:[0-9#*]\\uFE0F?\\u20E3|\\p{Regional_Indicator}{2}|(?:\\p{Emoji_Modifier_Base}\\uFE0F?\\p{Emoji_Modifier}?|\\p{Extended_Pictographic}\\uFE0F?)(?:\\u200D(?:\\p{Emoji_Modifier_Base}\\uFE0F?\\p{Emoji_Modifier}?|\\p{Extended_Pictographic}\\uFE0F?))*)$"
+}

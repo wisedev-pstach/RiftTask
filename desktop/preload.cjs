@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('rift',Object.freeze({
   ptyInput:(project,id,data)=>ipcRenderer.invoke('rift:ptyInput',project,id,data),
   ptyResize:(project,id,cols,rows)=>ipcRenderer.invoke('rift:ptyResize',project,id,cols,rows),
   ptyClose:(project,id)=>ipcRenderer.invoke('rift:ptyClose',project,id),
+  getVersion:()=>ipcRenderer.invoke('rift:getVersion'),
   session:()=>ipcRenderer.invoke('rift:session'),
   login:()=>ipcRenderer.invoke('rift:login'),
   checkLogin:()=>ipcRenderer.invoke('rift:checkLogin'),
