@@ -1,0 +1,24 @@
+import React from 'react';
+import {render,screen,waitFor} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {it,expect,vi} from 'vitest';
+import App from './App';
+import core from '../desktop/core.cjs';
+import cloud from '../desktop/cloud-snapshot.cjs';
+it('normal task edit and status save retain newer canonical progress and icon through real validation and cloud projection',async()=>{
+ const w=core.createSampleWorkspace();w.projects[0].icon='game';
+ w.tasks[0].progress=[{id:'entry-1',createdAt:w.updatedAt,body:'Synthetic progress',links:['https://example.com/build'],imageCount:1}];
+ const progress=structuredClone(w.tasks[0].progress);
+ const api={session:vi.fn(async()=>({account:{id:42,login:'synthetic'},ghAvailable:true})),load:vi.fn(async()=>core.validateWorkspace(w)),save:vi.fn(async next=>core.validateWorkspace(next))};
+ const u=userEvent.setup();render(<App bridge={api}/>);
+ await screen.findByRole('heading',{name:'Projects'});await u.click(screen.getByRole('button',{name:'lose.DOT (sample)',exact:true}));
+ await u.click(screen.getByRole('button',{name:'Edit task Try editing this sample task'}));
+ await u.clear(screen.getByLabelText('Task title'));await u.type(screen.getByLabelText('Task title'),'Edited synthetic task');
+ await u.click(screen.getByRole('button',{name:'Save task'}));await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+ await u.selectOptions(screen.getByLabelText('Status for Edited synthetic task'),'doing');
+ await waitFor(()=>expect(screen.getByLabelText('Status for Edited synthetic task')).toHaveValue('doing'));
+ const saved=core.validateWorkspace(api.save.mock.lastCall[0]);
+ expect(saved.tasks[0].progress).toEqual(progress);expect(saved.projects[0].icon).toBe('game');
+ const scope={accountId:42,repositoryId:81};
+ expect(cloud.prepareCloudRestore(JSON.stringify(cloud.projectCloudWorkspace(saved,scope)),saved,scope)).toEqual(saved);
+});
