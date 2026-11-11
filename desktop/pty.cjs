@@ -5,7 +5,7 @@ const {randomUUID} = require('node:crypto');
 
 // In-memory only. The resolver is main-process owned; never accept a renderer cwd
 // or executable. A nonce is required for every operation on a started shell.
-function createPty({resolve, spawn = (...args) => require('node-pty').spawn(...args)}) {
+function createPty({resolve, platform = process.platform, spawn = (...args) => require('node-pty').spawn(...args)}) {
   const sessions = new Map();
   let epoch = 0, closed = false, pending = 0;
   const same = (s, scope) => s.account === scope.account && s.path === scope.path &&
@@ -36,7 +36,7 @@ function createPty({resolve, spawn = (...args) => require('node-pty').spawn(...a
     } catch {
       if (epoch === version) remove(project);
       if (closed || epoch !== version) throw new Error('Terminal sessions closed.');
-      throw new Error('Terminal session scope or local directory is unavailable.');
+      throw new Error('Terminal session scope or local directory is unavailable. Choose an existing local directory in Edit project, save, then retry.');
     } finally {pending--;}
     const s = sessions.get(project);
     if (s && !same(s, scope)) remove(project);
@@ -64,7 +64,7 @@ function createPty({resolve, spawn = (...args) => require('node-pty').spawn(...a
       if (!path.isAbsolute(scope.path) || !fs.statSync(scope.path).isDirectory()) {
         throw new Error('Choose an existing local directory.');
       }
-      const windows = process.platform === 'win32';
+      const windows = platform === 'win32', mac = platform === 'darwin';
       // Construct an allowlist, not a token-name denylist. No inherited app
       // tokens, SSH agent socket, preload variables, shell functions or hooks.
       const env = {
@@ -75,8 +75,8 @@ function createPty({resolve, spawn = (...args) => require('node-pty').spawn(...a
         if (process.env[key]) env[key] = process.env[key];
       }
       const child = spawn(
-        windows ? 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' : '/bin/bash',
-        windows ? ['-NoLogo','-NoProfile'] : ['--noprofile','--norc'],
+        windows ? 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' : mac ? '/bin/zsh' : '/bin/bash',
+        windows ? ['-NoLogo','-NoProfile'] : mac ? ['-f'] : ['--noprofile','--norc'],
         {cwd:scope.path, env, name:'xterm-256color', cols:80, rows:24}
       );
       const s = {...scope, id:randomUUID(), child, output:'', revision:0, running:true,

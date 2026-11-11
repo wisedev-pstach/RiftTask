@@ -177,6 +177,13 @@ if [[ -n "$SOURCE_COMMIT" ]]; then
   echo "Building exact source commit: $SOURCE_COMMIT"
 fi
 
+ACTUAL_COMMIT="$(git rev-parse HEAD)"
+[[ "$ACTUAL_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo 'Error: invalid source HEAD; stopped.' >&2; exit 1; }
+SOURCE_VERSION="$(node -p "require('./package.json').version")"
+[[ "$SOURCE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ && ${#SOURCE_VERSION} -le 64 ]] || { echo 'Error: invalid source package version; stopped.' >&2; exit 1; }
+echo "Source commit: $ACTUAL_COMMIT"
+echo "Source package version: $SOURCE_VERSION"
+
 echo "Building RiftTask from source..."
 if [[ "$OS" == "mac" ]]; then
   # Never run node-pty's compile fallback, even with build_from_source inherited.
@@ -210,6 +217,7 @@ if [[ "$OS" == "mac" ]]; then
 
   echo ""
   echo "=== RiftTask installation complete! ==="
+  echo "Installed package version: $SOURCE_VERSION · source $ACTUAL_COMMIT"
   echo "Application installed at: $TARGET_APP"
   echo "Open the application at the path above using your file manager."
 
@@ -245,6 +253,7 @@ elif [[ "$OS" == "linux" ]]; then
 
   echo ""
   echo "=== RiftTask installation complete! ==="
+  echo "Installed package version: $SOURCE_VERSION · source $ACTUAL_COMMIT"
   echo "Installed at: $TARGET_DIR"
   echo "Launcher created at: $LAUNCHER_DIR/rifttask"
 fi

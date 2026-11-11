@@ -10,6 +10,7 @@ Load test-driven-development. Implement vertical slices: write a failing behavio
 
 ## Bridge contract (window.rift)
 All methods return Promises. Renderer MUST NOT import Node.
+- getVersion(): installed app version string from Electron app metadata; zero arguments, exact trusted-main-frame IPC only.
 - session(): {account: {id:number,login:string,name:string}|null, offline:boolean, ghAvailable:boolean}
 - login(): session shape, or {account:null,offline:false,ghAvailable:true,loginPending:true}; main process reuses a verified CLI account or starts fixed gh auth login in a native terminal on macOS/Windows. Launch is not authentication; Linux/errors provide a manual fallback.
 - checkLogin(): strictly verifies gh api user without launching authentication or accepting offline identity; resets pending launch so a failed check permits explicit retry.
@@ -34,7 +35,7 @@ Blank account starts empty. Version-1 workspaces may additionally contain `miles
 Blank account starts empty. Optional explicit sample workspace button can seed Games / lose.DOT, clearly labeled sample and never pretend imported data. Renderer builds IDs with crypto.randomUUID. Core normalizes/validates values with limits, referential integrity and safe IDs. Categories/projects with descendants cannot silently delete them: explicit confirmation/cascade or archive. Task UI: create/edit/delete, status, priority, due, notes and separate task progress; category/project create/edit with built-in icons; independent category collapse; search, all-active-project In progress (status doing, not legacy Today pins), project overview, board/list; empty/error/loading states; keyboard-friendly forms; project context for repository and terminal.
 
 ## Optional project/progress fields
-Projects may carry `icon` from `desktop/project-icons.json`; absence uses a renderer-only default. Tasks may carry `progress:[{id,createdAt,body,links,images?,imageCount?}]`. See `docs/PROJECT-PROGRESS.md` for limits and security rules. Absence remains absent; never rewrite a legacy workspace on load. Preserve legacy `today` values without showing obsolete pin controls/badges.
+Projects may carry `icon` as a preset key from `desktop/project-icons.json` or one bounded Unicode emoji per `desktop/project-emoji.json` and single-grapheme validation; absence uses a renderer-only default. Custom emoji requires 0.3.0+ on every syncing client; see `docs/PROJECT-CUSTOMIZATION.md`. Tasks may carry `progress:[{id,createdAt,body,links,images?,imageCount?}]`. See `docs/PROJECT-PROGRESS.md` for limits and security rules. Absence remains absent; never rewrite a legacy workspace on load. Preserve legacy `today` values without showing obsolete pin controls/badges.
 
 Progress Markdown is a literal bounded string; render only allowlisted React AST nodes from pinned marked tokens. Never use innerHTML, remote Markdown images or automatic previews. Explicit HTTP(S) URLs use the narrow opener; clipboard copy is user-triggered. PNG/JPEG/WebP inline image data is LOCAL and included in backups, excluded entirely (including names and IDs) from cloud projection; only counts travel. Strict remote canonical comparison rejects image payload fields rather than silently stripping them. Restore images only for matching project/task/entry IDs, and run final workspace size validation.
 

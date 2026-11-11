@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><base href="/"><title>RiftTask — synthetic customization acceptance, no native execution</title><div id="root"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import App from '/src/App.jsx';
+import '/src/styles.css';
+const updatedAt='2026-11-07T12:00:00.000Z';
+const categories=[{id:'games',name:'Games',color:'#c8ff63'},{id:'tools',name:'Developer tools',color:'#79bbaa'},{id:'ideas',name:'Ideas & experiments',color:'#b395de'}];
+const projects=[['lunar','games','Lunar prototype','🚀','Movement, exploration and a small world to discover.'],['website','tools','Launch website','globe','A clear home for the next release.'],['palette','tools','Palette workshop','🎨','Small tools for making better color choices.'],['garden','ideas','Garden notes','🌱','An example project with no tasks yet.'],['family','ideas','Shared weekend experiments with a deliberately longer project name','👨‍👩‍👧‍👦','Check long names without hiding the category or edit control.'],['cli','tools','CLI sandbox','code','Harmless synthetic fixture. No native shell is started.']].map(([id,categoryId,name,icon,description])=>({id,categoryId,name,icon,description,repositoryUrl:'',localPath:'',archived:false}));
+const tasks=[['lunar','doing'],['lunar','doing'],['lunar','review'],['lunar','backlog'],['lunar','done'],['website','backlog'],['website','review'],['palette','done']].map(([projectId,status],i)=>({id:'task-'+i,projectId,title:'Synthetic task '+i,notes:'Example data only',status,priority:'normal',dueDate:'',today:i===0,createdAt:updatedAt,completedAt:status==='done'?updatedAt:null}));
+let workspace={version:1,updatedAt,categories,projects,tasks};
+const browser=new URLSearchParams(location.search).has('browser');
+window.__simulated={get workspace(){return workspace;},saved:0,starts:0,picks:0,cancelPicker:false};
+const bridge={preview:browser,session:async()=>({account:{id:424242,login:'Synthetic bridge'},offline:false,ghAvailable:false}),load:async()=>structuredClone(workspace),save:async next=>{workspace=structuredClone(next);window.__simulated.saved++;return structuredClone(workspace);},getVersion:async()=> '0.3.0',chooseDirectory:async()=>{window.__simulated.picks++;return window.__simulated.cancelPicker?null:'/synthetic/local-project';},ptyStart:async()=>{window.__simulated.starts++;throw new Error('Synthetic acceptance bridge: no OS shell is started. Choose an existing local directory in Edit project.');}};
+createRoot(document.getElementById('root')).render(React.createElement(App,{bridge}));
+</script></html>

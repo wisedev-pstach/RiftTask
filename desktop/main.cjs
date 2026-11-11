@@ -71,7 +71,7 @@ async function start({app,BrowserWindow,Menu,ipcMain,shell,dialog}, dependencies
     contents.setWindowOpenHandler(()=>({action:'deny'}));
     contents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
     contents.session.setPermissionCheckHandler(()=>false);
-    dispose = registerIpc({ipcMain,webContents:contents,indexURL,service,shell,chooseDirectory:async()=>{
+    dispose = registerIpc({ipcMain,webContents:contents,indexURL,service,shell,getVersion:()=>app.getVersion(),chooseDirectory:async()=>{
       const result=await dialog.showOpenDialog(current,{title:'Choose project directory',properties:['openDirectory']});
       return result.canceled ? null : result.filePaths[0] ?? null;
     }});

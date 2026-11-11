@@ -7,6 +7,8 @@ function id(x){if(typeof x!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(
 function bool(x){if(typeof x!=='boolean')invalid('boolean');return x;}
 function date(x){if(typeof x!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(x)||!Number.isFinite(Date.parse(x+'T00:00:00.000Z'))||new Date(x+'T00:00:00.000Z').toISOString().slice(0,10)!==x)invalid('date');return x;}
 function iso(x){if(typeof x!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(x))invalid('timestamp');date(x.slice(0,10));if(!Number.isFinite(Date.parse(x))||Number(x.slice(11,13))>23||Number(x.slice(14,16))>59||Number(x.slice(17,19))>59)invalid('timestamp');return x;}
+const emojiRules=require('./project-emoji.json'),emojiPattern=new RegExp(emojiRules.pattern,'u');
+function projectIcon(x){if(typeof x!=='string')invalid('project icon');if(Object.hasOwn(require('./project-icons.json'),x))return x;if(typeof x!=='string'||x.length>emojiRules.maxLength||!emojiPattern.test(x)||[...new Intl.Segmenter('en',{granularity:'grapheme'}).segment(x)].length!==1)invalid('project icon');return x;}
 function choice(x,values){if(!values.includes(x))invalid('enum');return x;}
 function repo(x){text(x,'repositoryUrl',2048);if(x){let u;try{u=new URL(x);}catch{invalid('repositoryUrl');}if(u.protocol!=='https:'||u.username||u.password||!['github.com','dev.azure.com'].includes(u.hostname)&&!u.hostname.endsWith('.visualstudio.com'))invalid('repositoryUrl');}return x;}
 function keys(x,allowed){object(x,'progress');if(Object.keys(x).some(k=>!allowed.includes(k)))invalid('progress fields');}
@@ -33,7 +35,7 @@ function validateWorkspace(input){
  const read=(name,max,convert)=>{const a=input[name];if(!Array.isArray(a)||a.length>max)invalid(name);const seen=new Set();return a.map(x=>{object(x,name);const result=convert(x);if(seen.has(result.id))invalid('duplicate id');seen.add(result.id);return result;});};
  const categories=read('categories',1000,x=>({id:id(x.id),name:text(x.name,'name',200,true),color:(typeof x.color==='string'&&/^#[0-9a-fA-F]{6}$/.test(x.color))?x.color:invalid('color')}));
  const categoryIds=new Set(categories.map(x=>x.id));
- const projects=read('projects',5000,x=>{if(!categoryIds.has(x.categoryId))invalid('category reference');return {...(x.icon===undefined?{}:{icon:choice(x.icon,Object.keys(require('./project-icons.json')))}),id:id(x.id),categoryId:id(x.categoryId),name:text(x.name,'name',200,true),description:text(x.description,'description',20000),repositoryUrl:repo(x.repositoryUrl),localPath:text(x.localPath,'localPath',4096),archived:bool(x.archived)};});
+ const projects=read('projects',5000,x=>{if(!categoryIds.has(x.categoryId))invalid('category reference');return {...(x.icon===undefined?{}:{icon:projectIcon(x.icon)}),id:id(x.id),categoryId:id(x.categoryId),name:text(x.name,'name',200,true),description:text(x.description,'description',20000),repositoryUrl:repo(x.repositoryUrl),localPath:text(x.localPath,'localPath',4096),archived:bool(x.archived)};});
  const projectIds=new Set(projects.map(x=>x.id));
  const milestones=input.milestones===undefined?undefined:read('milestones',10000,x=>{if(!projectIds.has(x.projectId))invalid('milestone project reference');return {id:id(x.id),projectId:id(x.projectId),name:text(x.name,'milestone name',200,true),color:(typeof x.color==='string'&&/^#[0-9a-fA-F]{6}$/.test(x.color))?x.color:invalid('milestone color')};});
  const milestoneProjects=new Map((milestones||[]).map(m=>[m.id,m.projectId]));

@@ -219,6 +219,12 @@ try {
         Write-Host "Building exact source commit: $Ref"
     }
 
+    $ActualCommit = (Invoke-Native git @('rev-parse', 'HEAD')).Trim()
+    if ($ActualCommit -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid source HEAD; stopped.' }
+    $SourceVersion = (Invoke-Native node @('-p', "require('./package.json').version")).Trim()
+    if ($SourceVersion.Length -gt 64 -or $SourceVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$') { throw 'Invalid source package version; stopped.' }
+    Write-Host "Source commit: $ActualCommit"
+    Write-Host "Source package version: $SourceVersion"
     Write-Host "Building RiftTask from source..." -ForegroundColor Cyan
     # Prevent all lifecycle compile fallbacks, including inherited build_from_source.
     Invoke-Native npm @('ci', '--ignore-scripts', '--no-audit', '--no-fund')
@@ -250,6 +256,7 @@ try {
     }
 
     Write-Host "`n=== RiftTask installation complete! ===" -ForegroundColor Green
+    Write-Host "Installed package version: $SourceVersion - source $ActualCommit"
     Write-Host "Installed at: $TargetDir"
     Write-Host "Application executable: $ExePath"
     Write-Host "Open the application at the path above using your file manager."

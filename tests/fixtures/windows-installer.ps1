@@ -9,7 +9,11 @@ function Get-Command {
 function git {
     $global:LASTEXITCODE = 0
     if ($args[0] -eq '--version') { return 'git fixture' }
+    if ($args[0] -eq 'rev-parse') { if ($env:RIFT_BAD_HEAD) { return $env:RIFT_BAD_HEAD }; return ('1' * 40) }
     if ($args[0] -eq 'clone') {
+        [IO.Directory]::CreateDirectory($args[-1]) | Out-Null
+        $Version = if ($env:RIFT_BAD_VERSION) { $env:RIFT_BAD_VERSION } else { '0.3.0' }
+        [IO.File]::WriteAllText((Join-Path $args[-1] 'package.json'), (@{version=$Version} | ConvertTo-Json))
         [IO.Directory]::CreateDirectory((Join-Path $args[-1] 'scripts')) | Out-Null
         [IO.File]::Copy((Join-Path $env:RIFT_ROOT 'scripts/install-deploy.cjs'), (Join-Path $args[-1] 'scripts/install-deploy.cjs'))
         Microsoft.PowerShell.Management\New-Item -ItemType SymbolicLink -Path (Join-Path $args[-1] 'node_modules') -Target (Join-Path $env:RIFT_ROOT 'node_modules') | Out-Null

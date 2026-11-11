@@ -2,10 +2,10 @@
 
 ## Use
 
-- Choose **Project icon** when creating or editing a project. Built-in symbol IDs are shared between the renderer and validator; older projects use the folder symbol without a data migration. Sidebar, project tile and header use the same selection.
+- Choose **Project icon** when creating or editing a project. In 0.3.0+, select a built-in preset or Custom emoji and paste one Unicode emoji; update every syncing client first (0.2.0 rejects custom values). See [PROJECT-CUSTOMIZATION.md](PROJECT-CUSTOMIZATION.md). Built-in symbol IDs are shared between the renderer and validator; older projects use the folder symbol without a data migration. Sidebar, project tile and header use the same selection.
 - Use a category's disclosure arrow to hide only its project links. Its separate name button still opens its overview. This device's collapse preferences are scoped to the positive numeric GitHub account ID, safely parsed from `localStorage`; no workspace/cloud writes occur.
 - **In progress** replaces Today and lists only `doing` tasks from every active project regardless of due date or legacy pin. **All categories** is the default; the category filter includes categories without projects/tasks and shows an honest empty state. It combines with task search, is UI-only (not synced), resets on account changes and falls back to All categories if a restore/cloud refresh removes the selected category. Archived projects stay excluded until restored. Project names remain visible in task rows. Search includes titles, task notes and progress bodies/links. Existing `today` booleans remain unchanged; their old form control and badge are not shown.
-- Workflow order is **Backlog → In progress → In review → Done**, persisted as `backlog`, `doing`, `review`, `done`. Rows, board columns and task forms share this order; project tiles count review separately when present. Review is not completed and is excluded from global In progress. Only Done sets `completedAt`; leaving Done clears it. Existing tasks retain their stage and fields; exact legacy `next` still normalizes to backlog.
+- Workflow order is **Backlog → In progress → In review → Done**, persisted as `backlog`, `doing`, `review`, `done`. Rows, board columns and task forms share this order; project cards show all four counts, including zero. Review is not completed and is excluded from global In progress. Only Done sets `completedAt`; leaving Done clears it. Existing tasks retain their stage and fields; exact legacy `next` still normalizes to backlog.
 
 ### 0.2.0 client compatibility
 
@@ -16,10 +16,10 @@ Update **all devices/clients before using In review with cloud sync or shared ba
 
 ## Optional version-1 fields
 
-No workspace schema-version bump or load-time rewrite (application version is now 0.2.0). All optional fields remain absent in canonical output when absent in input.
+No workspace schema-version bump or load-time rewrite (application version is now 0.3.0). All optional fields remain absent in canonical output when absent in input.
 
 ```text
-projects[].icon?: folder | code | game | rocket | star | leaf | globe | tools
+projects[].icon?: folder | code | game | rocket | star | leaf | globe | tools | single bounded Unicode emoji (0.3.0+)
 
 tasks[].progress?: [{
   id: safe ID,
