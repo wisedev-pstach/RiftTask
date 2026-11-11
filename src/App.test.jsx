@@ -118,14 +118,14 @@ describe('workspace',()=>{
  await u.click(screen.getByRole('button',{name:'Second account project In progress 0 To do 0'}));
  expect(screen.getByRole('tab',{name:'Tasks'})).toHaveAttribute('aria-selected','true');expect(screen.getByRole('searchbox')).toHaveValue('');
  });
- it('excludes archived projects and their tasks from tiles, categories, task forms and Today',async()=>{
+ it('excludes archived projects and their tasks from tiles, categories, task forms and In progress',async()=>{
  const w=populated();w.projects.push({...w.projects[0],id:'archived',name:'Archived game',archived:true});w.tasks.push({id:'hidden',projectId:'archived',title:'Archived work',notes:'',status:'doing',priority:'normal',today:true});
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  expect(within(screen.getByRole('region',{name:'Project overview'})).getAllByRole('button')).toHaveLength(1);
  expect(screen.getByRole('button',{name:'lose.DOT In progress 0 To do 0'})).toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Games',exact:true}));expect(within(screen.getByRole('region',{name:'Project overview'})).queryByRole('button',{name:/Archived game/})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'New task'}));expect(within(screen.getByLabelText('Project')).queryByRole('option',{name:'Archived game'})).not.toBeInTheDocument();await u.click(screen.getByRole('button',{name:'Cancel'}));
- await u.click(screen.getByRole('button',{name:'Today',exact:true}));expect(screen.queryByRole('button',{name:'Edit task Archived work'})).not.toBeInTheDocument();
+ await u.click(screen.getByRole('button',{name:'In progress',exact:true}));expect(screen.queryByRole('button',{name:'Edit task Archived work'})).not.toBeInTheDocument();
  await u.click(screen.getByRole('button',{name:'Archived projects'}));await u.click(screen.getByRole('button',{name:'Restore Archived game'}));
  await waitFor(()=>expect(api.save).toHaveBeenCalledOnce());await u.click(screen.getByRole('button',{name:'Projects',exact:true}));
  expect(screen.getByRole('button',{name:'Archived game In progress 1 To do 0'})).toBeInTheDocument();expect(api.save.mock.lastCall[0].tasks).toEqual(w.tasks);
@@ -156,28 +156,28 @@ describe('workspace',()=>{
  expect(within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
  }finally{style.remove();}
  });
- it('renders exactly three ordered board regions on a three-column grid and moves tasks without losing fields',async()=>{
- const w=populated();w.tasks=['backlog','doing','done'].map((status,index)=>({id:`task-${index}`,projectId:'project',title:`Task ${status}`,notes:'Preserved notes',status,priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:status==='done'?'2026-10-02T12:00:00.000Z':null}));
+ it('renders exactly four ordered board regions on a four-column grid and moves tasks without losing fields',async()=>{
+ const w=populated();w.tasks=['backlog','doing','review','done'].map((status,index)=>({id:`task-${index}`,projectId:'project',title:`Task ${status}`,notes:'Preserved notes',status,priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:status==='done'?'2026-10-02T12:00:00.000Z':null}));
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.click(screen.getByRole('button',{name:'Board'}));
- const regions=within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
- for(const [index,status] of ['backlog','doing','done'].entries()){
+ const regions=within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','In review','Done']);
+ for(const [index,status] of ['backlog','doing','review','done'].entries()){
  expect(within(regions[index]).getByRole('button',{name:`Edit task Task ${status}`})).toBeInTheDocument();
- expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','done']);
+ expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','review','done']);
  }
  const style=document.createElement('style');style.textContent=styles;document.head.append(style);
- try{const gridRule=[...style.sheet.cssRules].find(rule=>rule.selectorText==='.board');expect(gridRule.style.getPropertyValue('grid-template-columns')).toBe('repeat(3,minmax(190px,1fr))');}finally{style.remove();}
+ try{const gridRule=[...style.sheet.cssRules].find(rule=>rule.selectorText==='.board');expect(gridRule.style.getPropertyValue('grid-template-columns')).toBe('repeat(4,minmax(190px,1fr))');}finally{style.remove();}
  await u.selectOptions(within(regions[0]).getByRole('combobox'),'doing');
  await waitFor(()=>expect(within(regions[1]).getByRole('button',{name:'Edit task Task backlog'})).toBeInTheDocument());
  expect(within(regions[0]).queryByRole('button',{name:'Edit task Task backlog'})).not.toBeInTheDocument();
  expect(api.save.mock.lastCall[0].tasks).toEqual([{...w.tasks[0],status:'doing'},...w.tasks.slice(1)]);
  });
- it('offers only the three ordered statuses in rows and task forms while preserving fields through transitions',async()=>{
+ it('offers four ordered statuses in rows and task forms while preserving fields through transitions',async()=>{
  const w=populated();const task={id:'task',projectId:'project',title:'Ship build',notes:'Keep release notes',status:'backlog',priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:null};w.tasks.push(task);
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
- const expectStatuses=select=>expect(within(select).getAllByRole('option').map(option=>[option.value,option.textContent])).toEqual([['backlog','Backlog'],['doing','In progress'],['done','Done']]);
+ const expectStatuses=select=>expect(within(select).getAllByRole('option').map(option=>[option.value,option.textContent])).toEqual([['backlog','Backlog'],['doing','In progress'],['review','In review'],['done','Done']]);
  expectStatuses(screen.getByLabelText('Status for Ship build'));
  await u.click(screen.getByRole('button',{name:'New task'}));
  expectStatuses(screen.getByLabelText('Status',{exact:true}));expect(screen.getByLabelText('Status',{exact:true})).toHaveValue('backlog');
@@ -353,14 +353,15 @@ describe('workspace',()=>{
  await u.type(screen.getByLabelText('Notes'),'Check diagonal speed');
  await u.selectOptions(screen.getByLabelText('Priority'),'high');
  await u.type(screen.getByLabelText('Due date'),'2026-11-01');
- await u.click(screen.getByLabelText('Pin to Today'));
+ await u.selectOptions(screen.getByLabelText('Status',{exact:true}),'doing');
  await u.click(screen.getByRole('button',{name:'Save task'}));
  await screen.findByRole('button',{name:'Edit task Fix movement'});
- expect(api.save.mock.lastCall[0].tasks[0]).toMatchObject({title:'Fix movement',notes:'Check diagonal speed',priority:'high',dueDate:'2026-11-01',today:true,projectId:'project',status:'backlog'});
- await u.click(screen.getByRole('button',{name:'Today'}));
+ expect(api.save.mock.lastCall[0].tasks[0]).toMatchObject({title:'Fix movement',notes:'Check diagonal speed',priority:'high',dueDate:'2026-11-01',today:false,projectId:'project',status:'doing'});
+ await u.click(screen.getByRole('button',{name:'In progress',exact:true}));
  expect(screen.getByRole('button',{name:'Edit task Fix movement'})).toBeInTheDocument();
  await u.selectOptions(screen.getByLabelText('Status for Fix movement'),'done');
  await waitFor(()=>expect(api.save.mock.lastCall[0].tasks[0].completedAt).toBeTruthy());
+ await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.click(screen.getByRole('button',{name:'Edit task Fix movement'}));
  await u.clear(screen.getByLabelText('Task title'));await u.type(screen.getByLabelText('Task title'),'Fix controller');
  await u.click(screen.getByRole('button',{name:'Save task'}));

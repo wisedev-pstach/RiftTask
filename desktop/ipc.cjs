@@ -16,9 +16,11 @@ function repositoryURL(value) {
   return url.href;
 }
 
+function progressURL(value){const invalid=()=>{throw new Error('Invalid progress link. Use HTTP or HTTPS without credentials.');};if(typeof value!=='string'||value.length>2048||!/^https?:\/\//.test(value)||/[\s\u0000-\u001f\u007f\\]/.test(value))return invalid();let url;try{url=new URL(value);}catch{return invalid();}if(!['http:','https:'].includes(url.protocol)||url.username||url.password)return invalid();return value;}
+
 function registerIpc({ipcMain,webContents,indexURL,service,shell,chooseDirectory}) {
   const channels = [];
-  const methods = {...BASIC_METHODS,openRepository:1,openTerminal:1,gitStatus:1,chooseDirectory:0,exportBackup:0,importBackup:0};
+  const methods = {...BASIC_METHODS,openProgressLink:1,openRepository:1,openTerminal:1,gitStatus:1,chooseDirectory:0,exportBackup:0,importBackup:0};
   for (const [name,arity] of Object.entries(methods)) {
     const channel = 'rift:'+name;
     ipcMain.handle(channel, async (event,...args) => {
@@ -27,6 +29,7 @@ function registerIpc({ipcMain,webContents,indexURL,service,shell,chooseDirectory
         throw new Error('Untrusted IPC sender.');
       }
       if (args.length !== arity) throw new Error('Invalid IPC arguments.');
+      if (name === 'openProgressLink') {await shell.openExternal(progressURL(args[0])); return;}
       if (name === 'openRepository') {await shell.openExternal(repositoryURL(args[0])); return;}
       if (name === 'chooseDirectory') return chooseDirectory();
       if (!Object.hasOwn(BASIC_METHODS,name)) throw new Error(name+' is not yet available. Scheduled for the native-integration milestone.');

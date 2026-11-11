@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('rift',Object.freeze({
   load:()=>ipcRenderer.invoke('rift:load'),
   save:workspace=>ipcRenderer.invoke('rift:save',workspace),
   chooseDirectory:()=>ipcRenderer.invoke('rift:chooseDirectory'),
+  openProgressLink:url=>ipcRenderer.invoke('rift:openProgressLink',url),
   openRepository:url=>ipcRenderer.invoke('rift:openRepository',url),
   openTerminal:projectId=>ipcRenderer.invoke('rift:openTerminal',projectId),
   gitStatus:projectId=>ipcRenderer.invoke('rift:gitStatus',projectId),
