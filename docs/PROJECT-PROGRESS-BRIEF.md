@@ -1,6 +1,9 @@
 # Project icons and task progress
 
-## Request
+## Current request (PR11 follow-up)
+Replace Today with global In progress showing only `doing` tasks across active projects, independent of legacy pins/due dates. Add an All categories / specific category filter, honest empty states and account/stale-category reset. Add persisted `review` (In review) between doing and done across task UI, strict storage/backup/cloud validation, preserving rich progress, icons, local images and legacy values. Update all clients before syncing review tasks: 0.1.1 rejects this new enum. Target 0.2.0; no schema-envelope migration, publication or real account access.
+
+## Original request
 User message `1568655198606332048` requests project icons, category-level collapse, an all-project In progress tab replacing Today, and task progress input supporting notes, images and links. Scope is RiftTask only. Base `d778b70`, branch `feat/project-icons-task-progress`.
 
 ## Acceptance

@@ -1,6 +1,6 @@
 {
   "name": "rifttask",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "A local-first project workspace for solo developers",
   "author": "wisedev",

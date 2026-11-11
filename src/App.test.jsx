@@ -156,28 +156,28 @@ describe('workspace',()=>{
  expect(within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region').filter(region=>markerSelectors.some(selector=>within(region).getByRole('heading').matches(selector))).map(region=>region.getAttribute('aria-label'))).toEqual(['In progress']);
  }finally{style.remove();}
  });
- it('renders exactly three ordered board regions on a three-column grid and moves tasks without losing fields',async()=>{
- const w=populated();w.tasks=['backlog','doing','done'].map((status,index)=>({id:`task-${index}`,projectId:'project',title:`Task ${status}`,notes:'Preserved notes',status,priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:status==='done'?'2026-10-02T12:00:00.000Z':null}));
+ it('renders exactly four ordered board regions on a four-column grid and moves tasks without losing fields',async()=>{
+ const w=populated();w.tasks=['backlog','doing','review','done'].map((status,index)=>({id:`task-${index}`,projectId:'project',title:`Task ${status}`,notes:'Preserved notes',status,priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:status==='done'?'2026-10-02T12:00:00.000Z':null}));
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
  await u.click(screen.getByRole('button',{name:'Board'}));
- const regions=within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','Done']);
- for(const [index,status] of ['backlog','doing','done'].entries()){
+ const regions=within(screen.getByRole('tabpanel',{name:'Tasks'})).getAllByRole('region');expect(regions.map(region=>region.getAttribute('aria-label'))).toEqual(['Backlog','In progress','In review','Done']);
+ for(const [index,status] of ['backlog','doing','review','done'].entries()){
  expect(within(regions[index]).getByRole('button',{name:`Edit task Task ${status}`})).toBeInTheDocument();
- expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','done']);
+ expect(within(within(regions[index]).getByRole('combobox')).getAllByRole('option').map(option=>option.value)).toEqual(['backlog','doing','review','done']);
  }
  const style=document.createElement('style');style.textContent=styles;document.head.append(style);
- try{const gridRule=[...style.sheet.cssRules].find(rule=>rule.selectorText==='.board');expect(gridRule.style.getPropertyValue('grid-template-columns')).toBe('repeat(3,minmax(190px,1fr))');}finally{style.remove();}
+ try{const gridRule=[...style.sheet.cssRules].find(rule=>rule.selectorText==='.board');expect(gridRule.style.getPropertyValue('grid-template-columns')).toBe('repeat(4,minmax(190px,1fr))');}finally{style.remove();}
  await u.selectOptions(within(regions[0]).getByRole('combobox'),'doing');
  await waitFor(()=>expect(within(regions[1]).getByRole('button',{name:'Edit task Task backlog'})).toBeInTheDocument());
  expect(within(regions[0]).queryByRole('button',{name:'Edit task Task backlog'})).not.toBeInTheDocument();
  expect(api.save.mock.lastCall[0].tasks).toEqual([{...w.tasks[0],status:'doing'},...w.tasks.slice(1)]);
  });
- it('offers only the three ordered statuses in rows and task forms while preserving fields through transitions',async()=>{
+ it('offers four ordered statuses in rows and task forms while preserving fields through transitions',async()=>{
  const w=populated();const task={id:'task',projectId:'project',title:'Ship build',notes:'Keep release notes',status:'backlog',priority:'high',dueDate:'2026-11-01',today:true,createdAt:'2026-10-01T12:00:00.000Z',completedAt:null};w.tasks.push(task);
  const api=bridge(w);const u=userEvent.setup();render(<App bridge={api}/>);await screen.findByRole('heading',{name:'Projects'});
  await u.click(screen.getByRole('button',{name:'lose.DOT',exact:true}));
- const expectStatuses=select=>expect(within(select).getAllByRole('option').map(option=>[option.value,option.textContent])).toEqual([['backlog','Backlog'],['doing','In progress'],['done','Done']]);
+ const expectStatuses=select=>expect(within(select).getAllByRole('option').map(option=>[option.value,option.textContent])).toEqual([['backlog','Backlog'],['doing','In progress'],['review','In review'],['done','Done']]);
  expectStatuses(screen.getByLabelText('Status for Ship build'));
  await u.click(screen.getByRole('button',{name:'New task'}));
  expectStatuses(screen.getByLabelText('Status',{exact:true}));expect(screen.getByLabelText('Status',{exact:true})).toHaveValue('backlog');
