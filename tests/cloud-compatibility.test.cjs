@@ -62,5 +62,5 @@ test('legacy workspace remains unchanged and icon manifest is included in deskto
  const old=createSampleWorkspace();assert.deepEqual(validateWorkspace(old),old);
  assert.deepEqual(cloud.prepareCloudRestore(JSON.stringify(cloud.projectCloudWorkspace(old,scope)),old,scope),old);
  assert.ok(pkg.build.files.includes('desktop/**/*'));assert.ok(fs.existsSync(path.join(__dirname,'../desktop/project-icons.json')));
- assert.equal(pkg.version,'0.3.0');assert.equal(lock.version,pkg.version);assert.equal(lock.packages[''].version,pkg.version);
+ assert.equal(pkg.version,'0.3.1');assert.equal(lock.version,pkg.version);assert.equal(lock.packages[''].version,pkg.version);
 });
