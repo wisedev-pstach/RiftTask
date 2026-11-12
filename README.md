@@ -9,7 +9,7 @@ Keep projects, tasks and an interactive terminal in one desktop workspace—with
 
 ## Install
 
-**Source-build preview, not a versioned GitHub release.** No GitHub releases have been published as of this source update. The commands below build the current public `main`, not a release tag. This source declares 0.3.1; unmerged feature branches are not installed by these commands. The installer reports its actual source HEAD and package version before building and again after successful installation. A version number alone does not identify an exact source commit.
+**Source-build preview, not a versioned GitHub release.** No GitHub releases have been published as of this source update. The commands below build the current public `main`, not a release tag. This source declares 0.4.0; unmerged feature branches are not installed by these commands. The installer reports its actual source HEAD and package version before building and again after successful installation. A version number alone does not identify an exact source commit.
 
 **Have Git, Node 24.15+ (24.x) or 26+, and npm/npx installed.** Internet access and build space are required. Mac/Windows x64 and ARM64 use shipped native terminal binaries: **no C++ compiler, Visual Studio or Python required**. Linux still needs Python 3, make, a C/C++ compiler and Electron's desktop libraries.
 

@@ -18,6 +18,9 @@ All methods return Promises. Renderer MUST NOT import Node.
 - load(): Workspace (requires active account)
 - save(workspace): validated persisted Workspace
 - chooseDirectory(): string|null (native dialog)
+- chooseTaskResource(kind:'file'|'directory',projectId,taskId|''): string|null (native fixed-kind draft picker; no persistence)
+- openTaskResource(taskId,resourceId): void (explicit saved-reference Open; current-account lookup, native filesystem/security checks, never renderer paths)
+- cancelResourceActions(): void (invalidate pending resource actions on editor/navigation context changes)
 - openRepository(url): void (validated HTTPS GitHub/Azure DevOps only)
 - openProgressLink(url): void (explicit click only; credential-free HTTP/HTTPS, ≤2048 characters; exact trusted main-frame and argument validation)
 - cloudStatus(), cloudCreate({name,consent:true}), cloudVerify(name), cloudEnable({repositoryId,consent:true}), cloudDisable(), cloudSync({pullSha?}): manual opt-in cloud operations; never transfer on sign-in or setup alone.
@@ -33,6 +36,9 @@ Legacy version-1 input with exact status `next` is accepted and normalized to `b
 Blank account starts empty. Version-1 workspaces may additionally contain `milestones:[{id,projectId,name,color}]` and task `milestoneId` (empty string = unassigned). These optional fields are preserved; old v1 files lacking them remain valid and are not rewritten on load. Labels require an existing project, unique safe IDs, name ≤200 characters, hex color; assigned tasks must reference a milestone in the same project. No implicit deletion of labels/assignments. Cloud canonical snapshots preserve both fields; old clients fail closed on unsupported milestone data rather than silently stripping it.
 
 Blank account starts empty. Optional explicit sample workspace button can seed Games / lose.DOT, clearly labeled sample and never pretend imported data. Renderer builds IDs with crypto.randomUUID. Core normalizes/validates values with limits, referential integrity and safe IDs. Categories/projects with descendants cannot silently delete them: explicit confirmation/cascade or archive. Task UI: create/edit/delete, status, priority, due, notes and separate task progress; category/project create/edit with built-in icons; independent category collapse; search, all-active-project In progress (status doing, not legacy Today pins), project overview, board/list; empty/error/loading states; keyboard-friendly forms; project context for repository and terminal.
+
+## Optional task-local resource fields
+Tasks may carry `localResources:[{id,name,path,kind:'file'|'directory'}]` (20 entries; label 200/path 4096; absolute POSIX/Windows paths, strict entry keys). Legacy absence stays absent. References are device-only metadata, included in explicit backups, stripped entirely before cloud sizing with no new wire count. Remote reference fields fail canonical comparison; local restore retention requires matching task AND project IDs and final 8 MiB validation. See `docs/TASK-LOCAL-RESOURCES.md` for native Open allowlist, symlink policy, lifecycle guards and verification limits. No notes auto-parsing, file upload/copy/delete or automatic Open.
 
 ## Optional project/progress fields
 Projects may carry `icon` as a preset key from `desktop/project-icons.json` or one bounded Unicode emoji per `desktop/project-emoji.json` and single-grapheme validation; absence uses a renderer-only default. Custom emoji requires 0.3.0+ on every syncing client; see `docs/PROJECT-CUSTOMIZATION.md`. Tasks may carry `progress:[{id,createdAt,body,links,images?,imageCount?}]`. See `docs/PROJECT-PROGRESS.md` for limits and security rules. Absence remains absent; never rewrite a legacy workspace on load. Preserve legacy `today` values without showing obsolete pin controls/badges.

@@ -24,7 +24,7 @@ function readBackup(source){
   try{return validateWorkspace(JSON.parse(text));}
   catch{throw new Error('Invalid backup. A valid version-1 RiftTask workspace is required; no data was replaced.');}
 }
-function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,confirmRestore=async()=>false,cloudRoot,cloudTransport,confirmCloudCreate=async()=>false,ptySpawn}) {
+function createService({auth,store,launchTerminal=openTerminalDirectory,chooseExportPath,chooseImportPath,confirmRestore=async()=>false,cloudRoot,cloudTransport,confirmCloudCreate=async()=>false,ptySpawn,openResourcePath,chooseResourcePath,resourceFs,resourceAuthorized=()=>true}) {
   let boundAccount=null,generation=0,terminalAccount=null,terminalBlocked=false,disconnecting=false;
   const pty=require('./pty.cjs').createPty({spawn:ptySpawn,resolve:async projectId=>{
     if(typeof projectId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId))throw new Error('Invalid project ID.');
@@ -60,10 +60,39 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
     boundAccount=account.id;
     return account.id;
   }
+  let resourceGeneration=0;
+  const {safeId,inspectResource}=require('./task-resources.cjs');
+  async function resourceContext(){
+    // Snapshot before the first await: stale auth must never rebind a newer session.
+    const epoch=resourceGeneration,version=generation,binding=boundAccount;
+    const guardBinding=expected=>{if(epoch!==resourceGeneration||version!==generation||boundAccount!==expected||disconnecting||!resourceAuthorized())throw new Error('Resource action expired. Retry from the current task.');};
+    guardBinding(binding);
+    const {account}=await auth.session();guardBinding(binding);
+    if(!account)throw new Error('Sign in to GitHub to open your workspace.');
+    if(binding!==null&&binding!==account.id)throw new Error('GitHub account changed. Retry.');
+    const id=account.id;boundAccount=id;
+    const guard=()=>guardBinding(id);
+    const verify=async()=>{guard();const state=await auth.session();guard();if(state.account?.id!==id)throw new Error('GitHub account changed. Retry.');};
+    return {id,guard,verify};
+  }
   return {
+    cancelResourceActions:()=>{resourceGeneration++;},
+    chooseTaskResource:async(kind,projectId,taskId)=>{
+      if(!['file','directory'].includes(kind)||!safeId(projectId)||(taskId!==''&&!safeId(taskId)))throw new Error('Invalid resource picker arguments.');
+      const context=await resourceContext();context.guard();
+      let originalProject;
+      const check=async()=>{const w=await store.load(context.id);context.guard();const task=taskId===''?null:w.tasks.find(t=>t.id===taskId);if(!w.projects.some(p=>p.id===projectId&&!p.archived)||(taskId!==''&&(!task||!w.projects.some(p=>p.id===task.projectId&&!p.archived))))throw new Error('Task or project not found.');if(task){if(originalProject!==undefined&&originalProject!==task.projectId)throw new Error('Saved task project changed. Retry.');originalProject=task.projectId;}};
+      await check();context.guard();if(!chooseResourcePath)throw new Error('Native picker unavailable.');const selected=await chooseResourcePath(kind);context.guard();await context.verify();context.guard();await check();context.guard();return selected;
+    },
+    openTaskResource:async(taskId,resourceId)=>{
+      if(!safeId(taskId)||!safeId(resourceId))throw new Error('Invalid resource ID.');
+      const context=await resourceContext();context.guard();
+      const resolve=async()=>{const w=await store.load(context.id);context.guard();const task=w.tasks.find(t=>t.id===taskId);if(!task||!w.projects.some(p=>p.id===task.projectId&&!p.archived))throw new Error('Task or project not found.');const resource=task.localResources?.find(r=>r.id===resourceId);if(!resource)throw new Error('Saved resource not found. Save the task first.');return {projectId:task.projectId,resource};};
+      const original=await resolve();context.guard();const target=await inspectResource(original.resource,resourceFs);context.guard();const current=await resolve();context.guard();if(JSON.stringify(original)!==JSON.stringify(current))throw new Error('Saved reference changed. Retry.');await context.verify();context.guard();if(!openResourcePath)throw new Error('Native Open unavailable.');const error=await openResourcePath(target);context.guard();if(error)throw new Error('Could not open file or folder: '+error);
+    },
     ptyStart:project=>pty.start(project),ptyRead:(project,id)=>pty.read(project,id),ptyInput:(project,id,data)=>pty.input(project,id,data),ptyResize:(project,id,cols,rows)=>pty.resize(project,id,cols,rows),ptyClose:(project,id)=>pty.close(project,id),
-    closeTerminals:()=>{pty.reset();terminalAccount=null;},
-    dispose:()=>{clearInterval(auditTimer);pty.dispose();},
+    closeTerminals:()=>{resourceGeneration++;pty.reset();terminalAccount=null;},
+    dispose:()=>{resourceGeneration++;clearInterval(auditTimer);pty.dispose();},
     cloudStatus:async()=>cloud?cloud.status():{state:'off'},
     cloudCreate:cloudCall('create'),cloudVerify:cloudCall('verify'),cloudEnable:cloudCall('enable'),cloudDisable:cloudCall('disable'),cloudSync:cloudCall('sync'),
     session:()=>refresh('session'),
@@ -112,7 +141,7 @@ function createService({auth,store,launchTerminal=openTerminalDirectory,chooseEx
       await pty.audit();return saved;
     },
     load:async()=>store.load(await accountId()),
-    save:async(workspace)=>{const saved=await store.save(await accountId(),workspace);await pty.audit();return saved;},
+    save:async(workspace)=>{resourceGeneration++;const saved=await store.save(await accountId(),workspace);await pty.audit();return saved;},
     openTerminal:async(projectId)=>{
       if (typeof projectId!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(projectId)) throw new Error('Invalid project ID.');
       const workspace=await store.load(await accountId());
