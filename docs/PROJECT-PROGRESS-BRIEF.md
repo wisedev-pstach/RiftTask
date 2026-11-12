@@ -1,6 +1,9 @@
 # Project icons and task progress
 
-## Current request (project customization, 0.3.0)
+## Current request (In progress category badges, 0.3.1)
+Each global In progress task card in Board and List must prominently show its live project's category as readable text, a color dot and a restrained tinted pill beside project context, even with All categories selected. Resolve from current workspace categories/project categoryId, never store category on tasks. Preserve project click-through, edit/status/progress, milestone identity, four stages, doing-only selection, archive and filter behavior. Theme ink keeps white category colors readable; long names wrap without obstructing controls. Missing lookup means no invented category. Small UI-only patch; no schema, cloud, redesign, native install, live account access or publication. Verify RED→GREEN, full tests/build and fresh synthetic Board/List light/dark 1024/1440 screenshots. No commit/push; parent reviews.
+
+## Prior request (project customization, 0.3.0)
 Custom single-emoji project icons alongside the eight presets; compact project cards with live category/color and all four state counts; separate card Edit plus visible project Edit controls. Explain native/browser/busy/missing-folder terminal states, explicit folder editor recovery and saved-path native validation (never guess a macOS replacement for a Windows path). Fence late directory-picker completion to its original workspace/editor. macOS project PTY uses fixed `/bin/zsh -f`, with Linux Bash/Windows PowerShell unchanged; Bash source installers remain Bash. Show the installed version via zero-argument trusted metadata IPC and report actual source HEAD/package version for main and pinned source installs. Clarify no published GitHub releases, main is a source-build preview. Preserve cloud redaction, strict unknown-field checks, legacy pins, four stages and retained sessions; custom emoji requires all syncing clients updated. No publication/native install/live cloud; parent review then PR-only.
 
 ## Prior request (PR11 follow-up)
