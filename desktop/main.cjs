@@ -30,7 +30,11 @@ async function start({app,BrowserWindow,Menu,ipcMain,shell,dialog}, dependencies
   const userData = app.getPath('userData');
   const auth = dependencies.createAuth({cachePath:path.join(userData,'identity.json')});
   const store = dependencies.createStore(userData);
-  const service = dependencies.createService({auth,store,cloudRoot:userData,chooseExportPath:async()=>{
+  const service = dependencies.createService({auth,store,cloudRoot:userData,resourceAuthorized:()=>!!window&&!window.isDestroyed?.()&&window.webContents.mainFrame?.url===indexURL,openResourcePath:p=>shell.openPath(p),chooseResourcePath:async kind=>{
+    if(!['file','directory'].includes(kind))throw new Error('Invalid resource kind.');
+    const result=await dialog.showOpenDialog(window,{title:kind==='file'?'Choose task file':'Choose task folder',properties:[kind==='file'?'openFile':'openDirectory']});
+    return result.canceled?null:result.filePaths[0]??null;
+  },chooseExportPath:async()=>{
     const result=await dialog.showSaveDialog(window,{title:'Export workspace backup',defaultPath:'RiftTask-backup.json',filters:[{name:'JSON workspace',extensions:['json']}],properties:['showOverwriteConfirmation']});
     return result.canceled ? null : result.filePath ?? null;
   },chooseImportPath:async()=>{

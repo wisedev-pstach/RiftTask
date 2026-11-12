@@ -1,6 +1,9 @@
 # Project icons and task progress
 
-## Current request (In progress category badges, 0.3.1)
+## Current request (task-local resources, 0.4.0)
+Add saved device-only file/folder references below task Notes, native/manual paths and optional labels. Save before Open; Open only explicit saved IDs through trusted native validation/default applications. No uploads, file copies/deletes, notes URL parsing or automatic opens. Preserve drafts on cancellation/errors, fence stale picker/open completions to account/editor/project context, reject scripts/executables/shortcuts/bundles and special files with honest errors. Keep all reference metadata out of cloud snapshots before sizing, reject remote injection and retain local references only for matching task+project IDs. Explicit backups include reference metadata, never file contents. Preserve existing editor composition and all unrelated task/progress/category/icon behavior. Strict vertical RED→GREEN, real temporary account persistence/security/lifecycle/backup/cloud tests, full tests/build and fresh synthetic light/dark 1024/1440 screenshots. No publication, account-data access, native install or live cloud.
+
+## Prior request (In progress category badges, 0.3.1)
 Each global In progress task card in Board and List must prominently show its live project's category as readable text, a color dot and a restrained tinted pill beside project context, even with All categories selected. Resolve from current workspace categories/project categoryId, never store category on tasks. Preserve project click-through, edit/status/progress, milestone identity, four stages, doing-only selection, archive and filter behavior. Theme ink keeps white category colors readable; long names wrap without obstructing controls. Missing lookup means no invented category. Small UI-only patch; no schema, cloud, redesign, native install, live account access or publication. Verify RED→GREEN, full tests/build and fresh synthetic Board/List light/dark 1024/1440 screenshots. No commit/push; parent reviews.
 
 ## Prior request (project customization, 0.3.0)

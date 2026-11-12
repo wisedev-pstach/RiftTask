@@ -5,6 +5,7 @@ import TerminalDock from './TerminalDock.jsx';
 import StartupScreen from './StartupScreen.jsx';
 import {convertProgressImage} from './progress-images.js';
 import ProgressFeed from './ProgressFeed.jsx';
+import TaskResources from './TaskResources.jsx';
 import projectIcons from '../desktop/project-icons.json';
 import emojiRules from '../desktop/project-emoji.json';
 function IconPicker({value}){const [selection,setSelection]=useState(Object.hasOwn(projectIcons,value||'folder')?value||'folder':'custom');return <><Field label="Project icon"><select aria-label="Project icon" name="icon" value={selection} onChange={e=>setSelection(e.target.value)}>{Object.entries(projectIcons).map(([key,glyph])=><option key={key} value={key}>{glyph} {key}</option>)}<option value="custom">Custom emoji…</option></select></Field>{selection==='custom'&&<><Field label="Custom emoji" name="customEmoji" required maxLength={emojiRules.maxLength} defaultValue={Object.hasOwn(projectIcons,value||'folder')?'':value} placeholder="Paste one emoji, e.g. 👩🏽‍💻"/><p className="emoji-help">Paste one emoji (families, skin tones and flags supported). Update every syncing device before using custom emoji.</p></>}</>;}
@@ -19,13 +20,14 @@ function previewBridge(){
 function Field({label,children,...props}) {
  return <label className="field"><span>{label}</span>{children || <input {...props}/>}</label>;
 }
-function TaskFields({item,projects,projectId,milestones}) {
+function TaskFields({item,projects,projectId,milestones,resources,saved,bridge,onResources,contextKey}) {
  const [selectedProject,setSelectedProject]=useState(item?.projectId||projectId||projects[0]?.id);
  return <>
   <Field label="Task title" name="title" required autoFocus maxLength={240} defaultValue={item?.title}/>
   <Field label="Project"><select name="projectId" value={selectedProject} onChange={e=>setSelectedProject(e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
   <Field label="Milestone"><select key={selectedProject} name="milestoneId" defaultValue={selectedProject===item?.projectId?item?.milestoneId||'':''}><option value="">No milestone</option>{milestones.filter(m=>m.projectId===selectedProject).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
   <Field label="Notes"><textarea name="notes" rows={5} defaultValue={item?.notes||''}/></Field>
+  <TaskResources resources={resources} saved={saved} taskId={item?.id} projectId={selectedProject} bridge={bridge} onChange={onResources} contextKey={contextKey}/>
   <div className="field-row"><Field label="Status"><select name="status" defaultValue={item?.status||'backlog'}>{Object.entries(statuses).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></Field>
   <Field label="Priority"><select name="priority" defaultValue={item?.priority||'normal'}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></Field></div>
   <Field label="Due date" type="date" name="dueDate" defaultValue={item?.dueDate||''}/>
@@ -106,7 +108,7 @@ export default function App({bridge: providedBridge = window.rift}) {
   catch(e){setError(e.message?.includes('Invalid workspace: size')?'Workspace reached the 8 MiB limit. Export a backup, then remove older progress images or entries and retry. Your draft is still here.':e.message||'Could not save workspace. Please try again.');return false;}
   finally {lock.current=false;setSaving(false);}
  }
- function edit(type,item){if(lock.current||!workspace)return;trigger.current=document.activeElement;setError('');setConfirmDelete(false);setEditor({type,item});}
+ function edit(type,item){if(lock.current||!workspace)return;trigger.current=document.activeElement;setError('');setConfirmDelete(false);setEditor({type,item,token:id(),resources:item?.localResources||[]});}
  async function submit(e) {
   e.preventDefault();
   const data=Object.fromEntries(new FormData(e.currentTarget));
@@ -117,6 +119,7 @@ export default function App({bridge: providedBridge = window.rift}) {
   if(key==='milestones')item.projectId=editor.item?.projectId||project.id;
   if(key==='projects')item.archived=editor.item?.archived||false;
   if(key==='tasks'){
+   if(editor.resources.length||editor.item?.localResources!==undefined)item.localResources=editor.resources;
    if(data.milestoneId===''&&editor.item?.milestoneId===undefined)delete item.milestoneId;
    item.today=editor.item?.today||false;item.createdAt=editor.item?.createdAt||new Date().toISOString();
    item.completedAt=item.status==='done'?(editor.item?.completedAt||new Date().toISOString()):null;
@@ -166,14 +169,14 @@ export default function App({bridge: providedBridge = window.rift}) {
    <div hidden={settings} className="terminal-container">{workspace&&<TerminalDock key={session.account.id} bridge={bridge} project={project} projects={workspace.projects} disabled={saving} theme={theme} onEditProject={()=>edit('project',project)}/>}</div>
   </main>
   {restorePrompt&&<div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="restore-title" className="editor"><h2 id="restore-title">Restore a backup</h2><p>This replaces this account’s current workspace after native confirmation. A healthy workspace becomes the rolling safety backup; corrupt originals are preserved unchanged in a new recovery archive before any replacement. Cancel leaves originals untouched.</p>{error&&<p role="alert">{error}</p>}<div className="form-actions"><button disabled={saving} onClick={()=>setRestorePrompt(false)}>Cancel</button><button className="primary" disabled={saving} onClick={()=>nativeAction('importBackup')}>Choose backup to restore</button></div></section></div>}
-  {editor&&<div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="editor-title" className="editor"><h2 id="editor-title">{editor.type==='progress'?'Task progress':`${editor.item?'Edit':'New'} ${editor.type}`}</h2>{error&&<p role="alert">{error}</p>}{editor.type==='progress'?<ProgressFeed convertImage={convertProgressImage} key={`${session.account.id}:${editor.item.id}`} task={workspace.tasks.find(t=>t.id===editor.item.id)} project={workspace.projects.find(p=>p.id===editor.item.projectId)} bridge={bridge} saving={saving} onClose={()=>setEditor(null)} onSave={progress=>persist({...workspace,tasks:workspace.tasks.map(t=>t.id===editor.item.id?{...t,progress}:t)})}/>:<form onSubmit={submit}><fieldset disabled={saving}>
+  {editor&&<div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="editor-title" className={editor.type==='task'?'editor task-editor':'editor'}><h2 id="editor-title">{editor.type==='progress'?'Task progress':`${editor.item?'Edit':'New'} ${editor.type}`}</h2>{error&&<p role="alert">{error}</p>}{editor.type==='progress'?<ProgressFeed convertImage={convertProgressImage} key={`${session.account.id}:${editor.item.id}`} task={workspace.tasks.find(t=>t.id===editor.item.id)} project={workspace.projects.find(p=>p.id===editor.item.projectId)} bridge={bridge} saving={saving} onClose={()=>setEditor(null)} onSave={progress=>persist({...workspace,tasks:workspace.tasks.map(t=>t.id===editor.item.id?{...t,progress}:t)})}/>:<form onSubmit={submit}><fieldset disabled={saving}><div className="editor-fields">
    {editor.type==='category'?<><Field autoFocus label="Category name" name="name" required maxLength={80} defaultValue={editor.item?.name}/><Field label="Color" name="color" type="color" defaultValue={editor.item?.color||'#c99a59'}/></>:editor.type==='project'?<>
     <Field autoFocus label="Project name" name="name" required maxLength={120} defaultValue={editor.item?.name}/><IconPicker key={editor.item?.id||'new'} value={editor.item?.icon}/><Field label="Category"><select name="categoryId" defaultValue={editor.item?.categoryId||workspace.categories[0]?.id}>{workspace.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
     <Field label="Description"><textarea name="description" defaultValue={editor.item?.description||''}/></Field><Field label="Repository URL" name="repositoryUrl" type="url" defaultValue={editor.item?.repositoryUrl||''}/><Field label="Local directory" name="localPath" defaultValue={editor.item?.localPath||''}/><button type="button" disabled={bridge.preview} onClick={()=>nativeAction('chooseDirectory')}>Choose directory</button>
-   </>:editor.type==='milestone'?<><Field autoFocus label="Milestone name" name="name" required maxLength={200} defaultValue={editor.item?.name}/><Field label="Color" name="color" type="color" defaultValue={editor.item?.color||'#79bbaa'}/></>:<TaskFields item={editor.item} projects={activeProjects} projectId={project?.id} milestones={workspace.milestones||[]}/>}
+   </>:editor.type==='milestone'?<><Field autoFocus label="Milestone name" name="name" required maxLength={200} defaultValue={editor.item?.name}/><Field label="Color" name="color" type="color" defaultValue={editor.item?.color||'#79bbaa'}/></>:<TaskFields key={editor.token} item={editor.item} projects={activeProjects} projectId={project?.id} milestones={workspace.milestones||[]} contextKey={`${session.account.id}:${view}:${settings}`} resources={editor.resources} saved={workspace.tasks.find(t=>t.id===editor.item?.id)?.localResources} bridge={bridge} onResources={resources=>setEditor(current=>current?.token===editor.token?{...current,resources}:current)}/>}
    {editor.type==='project'&&editor.item&&<div className="danger-zone"><p>Archiving hides this project and its tasks. Restore it anytime.</p><button type="button" onClick={()=>archiveProject(editor.item,true)}>Archive project</button></div>}
    {editor.type==='task'&&editor.item&&<div className="danger-zone">{confirmDelete?<><p>Delete this task permanently? This cannot be undone.</p><button type="button" className="danger" onClick={deleteTask}>Confirm deletion</button><button type="button" onClick={()=>setConfirmDelete(false)}>Keep task</button></>:<button type="button" className="danger" onClick={()=>setConfirmDelete(true)}>Delete task</button>}</div>}
-   <div className="form-actions"><button type="button" onClick={()=>setEditor(null)}>Cancel</button><button className="primary" type="submit">{saving?'Saving…':`Save ${editor.type}`}</button></div>
+   </div><div className="form-actions"><button type="button" onClick={()=>setEditor(null)}>Cancel</button><button className="primary" type="submit">{saving?'Saving…':`Save ${editor.type}`}</button></div>
   </fieldset></form>}</section></div>}
  </div>;
 }

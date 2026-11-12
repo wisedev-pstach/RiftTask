@@ -2,6 +2,9 @@
 // Keep this file self-contained: sandboxed preload can require Electron only.
 const {contextBridge,ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('rift',Object.freeze({
+  openTaskResource:(taskId,resourceId)=>ipcRenderer.invoke('rift:openTaskResource',taskId,resourceId),
+  chooseTaskResource:(kind,projectId,taskId)=>ipcRenderer.invoke('rift:chooseTaskResource',kind,projectId,taskId),
+  cancelResourceActions:()=>ipcRenderer.invoke('rift:cancelResourceActions'),
   cloudCreate:input=>ipcRenderer.invoke('rift:cloudCreate',input),
   cloudStatus:()=>ipcRenderer.invoke('rift:cloudStatus'),
   cloudVerify:name=>ipcRenderer.invoke('rift:cloudVerify',name),
